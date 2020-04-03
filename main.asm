@@ -14,12 +14,13 @@
 
 	; PCEAS equates.
 
-	.include  "standard.inc"
-	.include  "system.inc"
+	.include "standard.inc"
+	.include "system.inc"
 
 	; CC65 hardware equates (because I prefer them).
 
-	.include  "pce.inc"
+	.include "pce.inc"
+	.include "cd_labels.asm"
 
 	.list
 	.mlist
@@ -54,10 +55,36 @@ boot:
 
 	jsr     ex_vsync
 	jsr     ex_vsync
-
+	
+	;load catgirl image and palette from CD
+	stz <_cl ;sector number (bits 24-16)
+	lda #HIGH(_ADDR_art) ;sector number (bits 15-8)
+	sta <_ch
+	lda #LOW(_ADDR_art) ;sector number (bits 7-0)
+	sta <_dl
+	lda #2 ;write to a bank
+	sta <_dh
+	lda #$81 ;write starting at bank $81
+	sta <_bl
+	lda #8 ;write 8 sectors
+	sta <_al
+	jsr cd_read
+	
+	;play track from CD
+	lda #$80 ;play track number
+	sta <_bh
+	lda #2 ;track number to play
+	sta <_al
+	lda #$80 ;stop on track number
+	sta <_dh
+	lda #3 ;track number to stop on
+	sta <_cl
+	lda #1 ;infinite repeat play
+	sta <_dh
+	jsr cd_play
 
 	;copy catgirl palette
-	stw     #CatgirlPal,_ax
+	stw     #CatgirlPal,<_ax
 	stw     #$0000,VCE_ADDR_LO
 	jsr     copy_palette
 
@@ -265,9 +292,9 @@ boot_video_mode:
 	.bank 1
 	.org $6000
 Catgirl:
-	.incchr "gfx\catgirl.pcx"
+	; .incchr "gfx\catgirl.pcx"
 	
 	.bank 2
 	.org $8000
 CatgirlPal:
-	.incpal "gfx\catgirl.pcx",0,1
+	; .incpal "gfx\catgirl.pcx",0,1

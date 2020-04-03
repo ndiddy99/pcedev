@@ -1,3 +1,7 @@
-FILE main.iso BINARY
+FILE "game.bin" BINARY
   TRACK 01 MODE1/2048
+    INDEX 01 00:00:00
+FILE "music/track2.wav" WAVE
+  TRACK 02 AUDIO
+    PREGAP 00:02:00
     INDEX 01 00:00:00

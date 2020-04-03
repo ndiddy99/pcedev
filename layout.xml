@@ -1,0 +1,11 @@
+<data>
+    <compiler name="CD PCEAS3" command="..\huc\bin\pceas -m -l 2 -S -cd -overlay $filePath"/>
+
+    <config start_offset="0" track_path="game.bin"/>
+    <config label_path="cd_labels.asm"/>
+    <config huc_labels="False"/>
+
+    <binary path="ipl.bin" />
+    <program label="Main_Program" path="main.asm" compiler="CD PCEAS3" output="main.ovl"/>
+	<program label="art" path="art.asm" compiler="CD PCEAS3" output="art.ovl"/>
+</data>
