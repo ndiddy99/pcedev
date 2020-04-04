@@ -1,383 +1,461 @@
 #[1]   main.asm
    27           2000      	.zp
    28                     	
-   29  --:2000            string:
-   30  --:2000            	.ds 2
-   31                     
-   32           E000      	.data
+   29  --:2000            scroll_x: .ds 2
+   30  --:2002            scroll_y: .ds 2
+   31  --:2004            status: .ds 1
+   32  --:2005            frame: .ds 2
    33                     
-   34           E000      	.code
-   35           0000      	.bank   0
-   36           4070      	.org    $4070
-   37                     
-   38                     ;
-   39                     ;
+   34           E000      	.data
+   35                     
+   36           E000      	.code
+   37           0000      	.bank   0
+   38           4070      	.org    $4070
+   39                     
    40                     ;
-   41  00:4070            boot:
-   42  00:4070  20 99 E0  	jsr     ex_dspoff
-   43  00:4073  20 81 E0  	jsr     ex_rcroff
-   44  00:4076  20 87 E0  	jsr     ex_irqoff
-   45  00:4079  20 30 E0  	jsr     ad_reset
-   46                     
-   47  00:407C  20 A7 41  	jsr     init_vce
+   41                     ;
+   42                     ;
+   43  00:4070            boot:
+   44  00:4070  20 99 E0  	jsr     ex_dspoff
+   45  00:4073  20 81 E0  	jsr     ex_rcroff
+   46  00:4076  20 87 E0  	jsr     ex_irqoff
+   47  00:4079  20 30 E0  	jsr     ad_reset
    48                     
-   49                     	stw     #boot_video_mode,_ax
-       00:407F  A9 D7     	lda	LOW_BYTE #boot_video_mode
+   49  00:407C  20 10 42  	jsr     init_vce
+   50                     
+   51                     	stw     #boot_video_mode,_ax
+       00:407F  A9 40     	lda	LOW_BYTE #boot_video_mode
        00:4081  8D F8 20  	sta	LOW_BYTE _ax
-       00:4084  A9 41     	lda	HIGH_BYTE #boot_video_mode
+       00:4084  A9 42     	lda	HIGH_BYTE #boot_video_mode
        00:4086  8D F9 20  	sta	HIGH_BYTE _ax
-   50  00:4089  20 8C 41  	jsr     init_vdc
-   51                     				
-   52  00:408C  20 96 E0  	jsr     ex_dspon
-   53  00:408F  20 7E E0  	jsr     ex_rcron
-   54  00:4092  20 84 E0  	jsr     ex_irqon
-   55                     
-   56  00:4095  20 7B E0  	jsr     ex_vsync
-   57  00:4098  20 7B E0  	jsr     ex_vsync
-   58                     	
-   59                     	;load catgirl image and palette from CD
-   60  00:409B  64 FC     	stz <_cl ;sector number (bits 24-16)
-   61  00:409D  A9 00     	lda #HIGH(_ADDR_art) ;sector number (bits 15-8)
-   62  00:409F  85 FD     	sta <_ch
-   63  00:40A1  A9 0E     	lda #LOW(_ADDR_art) ;sector number (bits 7-0)
-   64  00:40A3  85 FE     	sta <_dl
-   65  00:40A5  A9 02     	lda #2 ;write to a bank
-   66  00:40A7  85 FF     	sta <_dh
-   67  00:40A9  A9 81     	lda #$81 ;write starting at bank $81
-   68  00:40AB  85 FA     	sta <_bl
-   69  00:40AD  A9 08     	lda #8 ;write 8 sectors
-   70  00:40AF  85 F8     	sta <_al
-   71  00:40B1  20 09 E0  	jsr cd_read
-   72                     	
-   73                     	;play track from CD
-   74  00:40B4  A9 80     	lda #$80 ;play track number
-   75  00:40B6  85 FB     	sta <_bh
-   76  00:40B8  A9 02     	lda #2 ;track number to play
-   77  00:40BA  85 F8     	sta <_al
-   78  00:40BC  A9 80     	lda #$80 ;stop on track number
-   79  00:40BE  85 FF     	sta <_dh
-   80  00:40C0  A9 03     	lda #3 ;track number to stop on
-   81  00:40C2  85 FC     	sta <_cl
-   82  00:40C4  A9 01     	lda #1 ;infinite repeat play
-   83  00:40C6  85 FF     	sta <_dh
-   84  00:40C8  20 12 E0  	jsr cd_play
-   85                     
-   86                     	;copy catgirl palette
-   87                     	stw     #CatgirlPal,<_ax
-       00:40CB  A9 00     	lda	LOW_BYTE #CatgirlPal
-       00:40CD  85 F8     	sta	LOW_BYTE <_ax
-       00:40CF  A9 80     	lda	HIGH_BYTE #CatgirlPal
-       00:40D1  85 F9     	sta	HIGH_BYTE <_ax
-   88                     	stw     #$0000,VCE_ADDR_LO
-       00:40D3  A9 00     	lda	LOW_BYTE #$0000
-       00:40D5  8D 02 04  	sta	LOW_BYTE VCE_ADDR_LO
-       00:40D8  A9 00     	lda	HIGH_BYTE #$0000
-       00:40DA  8D 03 04  	sta	HIGH_BYTE VCE_ADDR_LO
-   89  00:40DD  20 C5 41  	jsr     copy_palette
-   90                     
-   91                     	;clear tilemap
-   92                     	vreg #VDC_MAWR
-       00:40E0  A9 00     	lda	#VDC_MAWR
-       00:40E2  85 F7     	sta	<vdc_reg
+   52  00:4089  20 F5 41  	jsr     init_vdc
+   53                     	
+   54                     	;set up vsync handler
+   55                     	stw #my_vsync,vsync_hook
+       00:408C  A9 EC     	lda	LOW_BYTE #my_vsync
+       00:408E  8D 08 22  	sta	LOW_BYTE vsync_hook
+       00:4091  A9 41     	lda	HIGH_BYTE #my_vsync
+       00:4093  8D 09 22  	sta	HIGH_BYTE vsync_hook
+   56  00:4096  A9 30     	lda #%00110000
+   57  00:4098  8D F5 20  	sta irq_m
+   58  00:409B  20 96 E0  	jsr ex_dspon
+   59  00:409E  20 7E E0  	jsr ex_rcron
+   60  00:40A1  20 84 E0  	jsr ex_irqon
+   61  00:40A4  20 7B E0  	jsr ex_vsync
+   62  00:40A7  20 7B E0  	jsr ex_vsync
+   63                     
+   64                     	;load catgirl image and palette from CD
+   65  00:40AA  64 FC     	stz <_cl ;sector number (bits 24-16)
+   66  00:40AC  A9 00     	lda #HIGH(_ADDR_art) ;sector number (bits 15-8)
+   67  00:40AE  85 FD     	sta <_ch
+   68  00:40B0  A9 0E     	lda #LOW(_ADDR_art) ;sector number (bits 7-0)
+   69  00:40B2  85 FE     	sta <_dl
+   70  00:40B4  A9 02     	lda #2 ;write to a bank
+   71  00:40B6  85 FF     	sta <_dh
+   72  00:40B8  A9 81     	lda #$81 ;write starting at bank $81
+   73  00:40BA  85 FA     	sta <_bl
+   74  00:40BC  A9 08     	lda #8 ;write 8 sectors
+   75  00:40BE  85 F8     	sta <_al
+   76  00:40C0  78        	sei	
+   77  00:40C1  20 09 E0  	jsr cd_read
+   78  00:40C4  58        	cli
+   79                     	
+   80                     	;play track from CD
+   81  00:40C5  A9 80     	lda #$80 ;play track number
+   82  00:40C7  85 FB     	sta <_bh
+   83  00:40C9  A9 02     	lda #2 ;track number to play
+   84  00:40CB  85 F8     	sta <_al
+   85  00:40CD  64 F9     	stz <_ah
+   86  00:40CF  64 FA     	stz <_bl
+   87  00:40D1  A9 81     	lda #($80 | 1) ;stop on track, infinite repeat play
+   88  00:40D3  85 FF     	sta <_dh
+   89  00:40D5  A9 03     	lda #3 ;track number to stop on
+   90  00:40D7  85 FC     	sta <_cl
+   91  00:40D9  64 FD     	stz <_ch
+   92  00:40DB  64 FE     	stz <_dl
+   93  00:40DD  20 12 E0  	jsr cd_play
+   94                     
+   95                     	;copy catgirl palette
+   96                     	stw     #CatgirlPal,<_ax
+       00:40E0  A9 00     	lda	LOW_BYTE #CatgirlPal
+       00:40E2  85 F8     	sta	LOW_BYTE <_ax
+       00:40E4  A9 80     	lda	HIGH_BYTE #CatgirlPal
+       00:40E6  85 F9     	sta	HIGH_BYTE <_ax
+   97                     	stw     #$0000,VCE_ADDR_LO
+       00:40E8  A9 00     	lda	LOW_BYTE #$0000
+       00:40EA  8D 02 04  	sta	LOW_BYTE VCE_ADDR_LO
+       00:40ED  A9 00     	lda	HIGH_BYTE #$0000
+       00:40EF  8D 03 04  	sta	HIGH_BYTE VCE_ADDR_LO
+   98  00:40F2  20 2E 42  	jsr     copy_palette
+   99                     
+  100                     	;clear tilemap
+  101                     	vreg #VDC_MAWR
+       00:40F5  A9 00     	lda	#VDC_MAWR
+       00:40F7  85 F7     	sta	<vdc_reg
                 0001      .if (2 = ARG_IMMED)
-       00:40E4  03 00     	st0	#VDC_MAWR
+       00:40F9  03 00     	st0	#VDC_MAWR
                           .else
                           .endif
-   93                     	stwz video_data
-       00:40E6  9C 02 00  	stz	LOW_BYTE video_data
-       00:40E9  9C 03 00  	stz	HIGH_BYTE video_data
-   94                     	vreg #VDC_VWR
-       00:40EC  A9 02     	lda	#VDC_VWR
-       00:40EE  85 F7     	sta	<vdc_reg
+  102                     	stwz video_data
+       00:40FB  9C 02 00  	stz	LOW_BYTE video_data
+       00:40FE  9C 03 00  	stz	HIGH_BYTE video_data
+  103                     	vreg #VDC_VWR
+       00:4101  A9 02     	lda	#VDC_VWR
+       00:4103  85 F7     	sta	<vdc_reg
                 0001      .if (2 = ARG_IMMED)
-       00:40F0  03 02     	st0	#VDC_VWR
+       00:4105  03 02     	st0	#VDC_VWR
                           .else
                           .endif
-   95  00:40F2  A2 40     	ldx #64 ;max tilemap size is 64x64
-   96  00:40F4  A0 40     	ldy #64
-   97  00:40F6            .clr_loop:	
-   98                     	stw #$200,video_data
-       00:40F6  A9 00     	lda	LOW_BYTE #$200
-       00:40F8  8D 02 00  	sta	LOW_BYTE video_data
-       00:40FB  A9 02     	lda	HIGH_BYTE #$200
-       00:40FD  8D 03 00  	sta	HIGH_BYTE video_data
-   99  00:4100  CA        	dex
-  100  00:4101  D0 F3     	bne .clr_loop
-  101  00:4103  A2 40     	ldx #64
-  102  00:4105  88        	dey
-  103  00:4106  D0 EE     	bne .clr_loop
-  104                     	;copy catgirl image
-  105                     	vreg #VDC_MAWR
-       00:4108  A9 00     	lda	#VDC_MAWR
-       00:410A  85 F7     	sta	<vdc_reg
+  104  00:4107  A2 40     	ldx #64 ;max tilemap size is 64x64
+  105  00:4109  A0 40     	ldy #64
+  106  00:410B            .clr_loop:	
+  107                     	stw #$200,video_data
+       00:410B  A9 00     	lda	LOW_BYTE #$200
+       00:410D  8D 02 00  	sta	LOW_BYTE video_data
+       00:4110  A9 02     	lda	HIGH_BYTE #$200
+       00:4112  8D 03 00  	sta	HIGH_BYTE video_data
+  108  00:4115  CA        	dex
+  109  00:4116  D0 F3     	bne .clr_loop
+  110  00:4118  A2 40     	ldx #64
+  111  00:411A  88        	dey
+  112  00:411B  D0 EE     	bne .clr_loop
+  113                     	;copy catgirl image
+  114                     	vreg #VDC_MAWR
+       00:411D  A9 00     	lda	#VDC_MAWR
+       00:411F  85 F7     	sta	<vdc_reg
                 0001      .if (2 = ARG_IMMED)
-       00:410C  03 00     	st0	#VDC_MAWR
+       00:4121  03 00     	st0	#VDC_MAWR
                           .else
                           .endif
-  106                     	stw #$2000,video_data
-       00:410E  A9 00     	lda	LOW_BYTE #$2000
-       00:4110  8D 02 00  	sta	LOW_BYTE video_data
-       00:4113  A9 20     	lda	HIGH_BYTE #$2000
-       00:4115  8D 03 00  	sta	HIGH_BYTE video_data
-  107                     	vreg #VDC_VWR
-       00:4118  A9 02     	lda	#VDC_VWR
-       00:411A  85 F7     	sta	<vdc_reg
+  115                     	stw #$2000,video_data
+       00:4123  A9 00     	lda	LOW_BYTE #$2000
+       00:4125  8D 02 00  	sta	LOW_BYTE video_data
+       00:4128  A9 20     	lda	HIGH_BYTE #$2000
+       00:412A  8D 03 00  	sta	HIGH_BYTE video_data
+  116                     	vreg #VDC_VWR
+       00:412D  A9 02     	lda	#VDC_VWR
+       00:412F  85 F7     	sta	<vdc_reg
                 0001      .if (2 = ARG_IMMED)
-       00:411C  03 02     	st0	#VDC_VWR
+       00:4131  03 02     	st0	#VDC_VWR
                           .else
                           .endif
-  108  00:411E  E3 00 60  	tia Catgirl,video_data,$2000
-       00:4121  02 00 00  
-       00:4124  20        
-  109                     	;tilemap
-  110                     	vreg #VDC_MAWR
-       00:4125  A9 00     	lda	#VDC_MAWR
-       00:4127  85 F7     	sta	<vdc_reg
+  117  00:4133  E3 00 60  	tia Catgirl,video_data,$2000
+       00:4136  02 00 00  
+       00:4139  20        
+  118                     	;tilemap
+  119                     	vreg #VDC_MAWR
+       00:413A  A9 00     	lda	#VDC_MAWR
+       00:413C  85 F7     	sta	<vdc_reg
                 0001      .if (2 = ARG_IMMED)
-       00:4129  03 00     	st0	#VDC_MAWR
+       00:413E  03 00     	st0	#VDC_MAWR
                           .else
                           .endif
-  111                     	stw #8,video_data ;$0 is the tilemap address in vram
-       00:412B  A9 08     	lda	LOW_BYTE #8
-       00:412D  8D 02 00  	sta	LOW_BYTE video_data
-       00:4130  A9 00     	lda	HIGH_BYTE #8
-       00:4132  8D 03 00  	sta	HIGH_BYTE video_data
-  112                     	vreg #VDC_VWR
-       00:4135  A9 02     	lda	#VDC_VWR
-       00:4137  85 F7     	sta	<vdc_reg
+  120                     	stw #8,video_data ;$0 is the tilemap address in vram
+       00:4140  A9 08     	lda	LOW_BYTE #8
+       00:4142  8D 02 00  	sta	LOW_BYTE video_data
+       00:4145  A9 00     	lda	HIGH_BYTE #8
+       00:4147  8D 03 00  	sta	HIGH_BYTE video_data
+  121                     	vreg #VDC_VWR
+       00:414A  A9 02     	lda	#VDC_VWR
+       00:414C  85 F7     	sta	<vdc_reg
                 0001      .if (2 = ARG_IMMED)
-       00:4139  03 02     	st0	#VDC_VWR
+       00:414E  03 02     	st0	#VDC_VWR
                           .else
                           .endif
-  113  00:413B  A2 10     	ldx #$10 ;image is 16x16 tiles
-  114  00:413D  A0 10     	ldy #$10
-  115                     	stw #$200,<_si ;start of image in tiles
-       00:413F  A9 00     	lda	LOW_BYTE #$200
-       00:4141  85 EE     	sta	LOW_BYTE <_si
-       00:4143  A9 02     	lda	HIGH_BYTE #$200
-       00:4145  85 EF     	sta	HIGH_BYTE <_si
-  116                     	stw #8,<_ax ;vram address to write to
-       00:4147  A9 08     	lda	LOW_BYTE #8
-       00:4149  85 F8     	sta	LOW_BYTE <_ax
-       00:414B  A9 00     	lda	HIGH_BYTE #8
-       00:414D  85 F9     	sta	HIGH_BYTE <_ax
-  117  00:414F            .loop:
-  118                     	stw <_si,video_data
-       00:414F  A5 EE     	lda	LOW_BYTE <_si
-       00:4151  8D 02 00  	sta	LOW_BYTE video_data
-       00:4154  A5 EF     	lda	HIGH_BYTE <_si
-       00:4156  8D 03 00  	sta	HIGH_BYTE video_data
-  119                     	incw <_si
-       00:4159  E6 EE     	inc	<_si		; value at stated memory
-       00:415B  D0 02     	bne	.x_00017		; location
-       00:415D  E6 EF     	inc	<_si+1
-       00:415F            .x_00017:
-  120  00:415F  CA        	dex
-  121  00:4160  D0 ED     	bne .loop
-  122                     	;32x32 tilemap
-  123                     	addw #$20,<_ax
+  122  00:4150  A2 10     	ldx #$10 ;image is 16x16 tiles
+  123  00:4152  A0 10     	ldy #$10
+  124                     	stw #$200,<_si ;start of image in tiles
+       00:4154  A9 00     	lda	LOW_BYTE #$200
+       00:4156  85 EE     	sta	LOW_BYTE <_si
+       00:4158  A9 02     	lda	HIGH_BYTE #$200
+       00:415A  85 EF     	sta	HIGH_BYTE <_si
+  125                     	stw #8,<_ax ;vram address to write to
+       00:415C  A9 08     	lda	LOW_BYTE #8
+       00:415E  85 F8     	sta	LOW_BYTE <_ax
+       00:4160  A9 00     	lda	HIGH_BYTE #8
+       00:4162  85 F9     	sta	HIGH_BYTE <_ax
+  126  00:4164            .loop:
+  127                     	stw <_si,video_data
+       00:4164  A5 EE     	lda	LOW_BYTE <_si
+       00:4166  8D 02 00  	sta	LOW_BYTE video_data
+       00:4169  A5 EF     	lda	HIGH_BYTE <_si
+       00:416B  8D 03 00  	sta	HIGH_BYTE video_data
+  128                     	incw <_si
+       00:416E  E6 EE     	inc	<_si		; value at stated memory
+       00:4170  D0 02     	bne	.x_00018		; location
+       00:4172  E6 EF     	inc	<_si+1
+       00:4174            .x_00018:
+  129  00:4174  CA        	dex
+  130  00:4175  D0 ED     	bne .loop
+  131                     	;32x32 tilemap
+  132                     	addw #$20,<_ax
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
                           	;
-       00:4162  18        	clc
-       00:4163  A5 F8     	lda	LOW_BYTE <_ax
-       00:4165  69 20     	adc	LOW_BYTE #$20
-       00:4167  85 F8     	sta	LOW_BYTE <_ax
-       00:4169  A5 F9     	lda	HIGH_BYTE <_ax
-       00:416B  69 00     	adc	HIGH_BYTE #$20
-       00:416D  85 F9     	sta	HIGH_BYTE <_ax
+       00:4177  18        	clc
+       00:4178  A5 F8     	lda	LOW_BYTE <_ax
+       00:417A  69 20     	adc	LOW_BYTE #$20
+       00:417C  85 F8     	sta	LOW_BYTE <_ax
+       00:417E  A5 F9     	lda	HIGH_BYTE <_ax
+       00:4180  69 00     	adc	HIGH_BYTE #$20
+       00:4182  85 F9     	sta	HIGH_BYTE <_ax
                           .endif
-  124                     	vreg #VDC_MAWR
-       00:416F  A9 00     	lda	#VDC_MAWR
-       00:4171  85 F7     	sta	<vdc_reg
+  133                     	vreg #VDC_MAWR
+       00:4184  A9 00     	lda	#VDC_MAWR
+       00:4186  85 F7     	sta	<vdc_reg
                 0001      .if (2 = ARG_IMMED)
-       00:4173  03 00     	st0	#VDC_MAWR
+       00:4188  03 00     	st0	#VDC_MAWR
                           .else
                           .endif
-  125                     	stw <_ax,video_data
-       00:4175  A5 F8     	lda	LOW_BYTE <_ax
-       00:4177  8D 02 00  	sta	LOW_BYTE video_data
-       00:417A  A5 F9     	lda	HIGH_BYTE <_ax
-       00:417C  8D 03 00  	sta	HIGH_BYTE video_data
-  126                     	vreg #VDC_VWR
-       00:417F  A9 02     	lda	#VDC_VWR
-       00:4181  85 F7     	sta	<vdc_reg
+  134                     	stw <_ax,video_data
+       00:418A  A5 F8     	lda	LOW_BYTE <_ax
+       00:418C  8D 02 00  	sta	LOW_BYTE video_data
+       00:418F  A5 F9     	lda	HIGH_BYTE <_ax
+       00:4191  8D 03 00  	sta	HIGH_BYTE video_data
+  135                     	vreg #VDC_VWR
+       00:4194  A9 02     	lda	#VDC_VWR
+       00:4196  85 F7     	sta	<vdc_reg
                 0001      .if (2 = ARG_IMMED)
-       00:4183  03 02     	st0	#VDC_VWR
+       00:4198  03 02     	st0	#VDC_VWR
                           .else
                           .endif
-  127  00:4185  A2 10     	ldx #$10
-  128  00:4187  88        	dey
-  129  00:4188  D0 C5     	bne .loop
-  130                     	
-  131                     	;main loop
-  132  00:418A            main:
-  133  00:418A  80 FE     	bra main
-  134                     ; ***************************************************************************
-  135                     ; ***************************************************************************
-  136                     ;
-  137                     ;
-  138                     
-  139                     
-  140  00:418C            init_vdc:
-  141  00:418C  08        	php
-  142  00:418D  78        	sei
-  143  00:418E  C2        	cly
-  144  00:418F            .loop:
-  145  00:418F  B1 F8     	lda     [_ax],y
-  146  00:4191  F0 12     	beq     .done
-  147  00:4193  8D 00 00  	sta     VDC_CTRL
-  148  00:4196  C8        	iny
-  149  00:4197  B1 F8     	lda     [_ax],y
-  150  00:4199  8D 02 00  	sta     VDC_DATA_LO
-  151  00:419C  C8        	iny
-  152  00:419D  B1 F8     	lda     [_ax],y
-  153  00:419F  8D 03 00  	sta     VDC_DATA_HI
-  154  00:41A2  C8        	iny
-  155  00:41A3  80 EA     	bra     .loop
-  156  00:41A5            .done:
-  157  00:41A5  28        	plp
-  158  00:41A6  60        	rts
-  159                     
-  160                     
-  161                     ; ***************************************************************************
-  162                     ; ***************************************************************************
-  163                     ;
-  164                     ;
-  165                     
-  166  00:41A7            init_vce:
-  167  00:41A7  08        	php
-  168  00:41A8  78        	sei
-  169  00:41A9  9C 02 04  	stz     VCE_ADDR_LO
-  170  00:41AC  9C 03 04  	stz     VCE_ADDR_HI
-  171  00:41AF  A0 02     	ldy     #$02
-  172  00:41B1  82        	clx
-  173  00:41B2            .loop:
-  174  00:41B2  9C 04 04  	stz     VCE_DATA_LO
-  175  00:41B5  9C 05 04  	stz     VCE_DATA_HI
-  176  00:41B8  CA        	dex
-  177  00:41B9  D0 F7     	bne     .loop
-  178  00:41BB  88        	dey
-  179  00:41BC  D0 F4     	bne     .loop
-  180  00:41BE  A9 00     	lda     #VCE_CR_5MHz
-  181  00:41C0  8D 00 04  	sta     VCE_CTRL
-  182  00:41C3  28        	plp
-  183  00:41C4  60        	rts
-  184                     
-  185                     
-  186                     ; ***************************************************************************
-  187                     ; ***************************************************************************
-  188                     ;
-  189                     ;
-  190                     
-  191  00:41C5            copy_palette:   
-  192  00:41C5  C2        	cly
-  193  00:41C6            .loop:
-  194  00:41C6  B1 F8     	lda     [_ax],y
-  195  00:41C8  C8        	iny
-  196  00:41C9  8D 04 04  	sta     VCE_DATA_LO
-  197  00:41CC  B1 F8     	lda     [_ax],y
-  198  00:41CE  C8        	iny
-  199  00:41CF  8D 05 04  	sta     VCE_DATA_HI
-  200  00:41D2  C0 20     	cpy     #32
-  201  00:41D4  D0 F0     	bne     .loop
-  202  00:41D6  60        	rts
-  203                     
-  204                     
-  205                     ; ***************************************************************************
-  206                     ; ***************************************************************************
-  207                     
-  208                     ; VDC constants for 240 & 256 wide display.
-  209                     
-  210           0000      VCE_CR_5MHz  = $00
-  211                     
-  212           0302      VDC_HSR_240  = $0302
-  213           041D      VDC_HDR_240  = $041D
-  214                     
-  215           0202      VDC_HSR_256  = $0202
-  216           041F      VDC_HDR_256  = $041F
+  136  00:419A  A2 10     	ldx #$10
+  137  00:419C  88        	dey
+  138  00:419D  D0 C5     	bne .loop
+  139                     	
+  140                     	
+  141                     	stwz <scroll_x
+       00:419F  64 00     	stz	LOW_BYTE <scroll_x
+       00:41A1  64 01     	stz	HIGH_BYTE <scroll_x
+  142                     	stwz <scroll_y
+       00:41A3  64 02     	stz	LOW_BYTE <scroll_y
+       00:41A5  64 03     	stz	HIGH_BYTE <scroll_y
+  143                     	;main loop
+  144  00:41A7            main:
+  145                     	decw <scroll_x
+       00:41A7  38        	sec			; value at stated memory
+       00:41A8  A5 00     	lda	<scroll_x		; location
+       00:41AA  E9 01     	sbc	#1
+       00:41AC  85 00     	sta	<scroll_x
+       00:41AE  A5 01     	lda	<scroll_x+1
+       00:41B0  E9 00     	sbc	#0
+       00:41B2  85 01     	sta	<scroll_x+1
+  146                     	decw <scroll_y
+       00:41B4  38        	sec			; value at stated memory
+       00:41B5  A5 02     	lda	<scroll_y		; location
+       00:41B7  E9 01     	sbc	#1
+       00:41B9  85 02     	sta	<scroll_y
+       00:41BB  A5 03     	lda	<scroll_y+1
+       00:41BD  E9 00     	sbc	#0
+       00:41BF  85 03     	sta	<scroll_y+1
+  147                     	vreg #VDC_BXR
+       00:41C1  A9 07     	lda	#VDC_BXR
+       00:41C3  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       00:41C5  03 07     	st0	#VDC_BXR
+                          .else
+                          .endif
+  148                     	stw <scroll_x,video_data
+       00:41C7  A5 00     	lda	LOW_BYTE <scroll_x
+       00:41C9  8D 02 00  	sta	LOW_BYTE video_data
+       00:41CC  A5 01     	lda	HIGH_BYTE <scroll_x
+       00:41CE  8D 03 00  	sta	HIGH_BYTE video_data
+  149                     	vreg #VDC_BYR
+       00:41D1  A9 08     	lda	#VDC_BYR
+       00:41D3  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       00:41D5  03 08     	st0	#VDC_BYR
+                          .else
+                          .endif
+  150                     	stw <scroll_y,video_data
+       00:41D7  A5 02     	lda	LOW_BYTE <scroll_y
+       00:41D9  8D 02 00  	sta	LOW_BYTE video_data
+       00:41DC  A5 03     	lda	HIGH_BYTE <scroll_y
+       00:41DE  8D 03 00  	sta	HIGH_BYTE video_data
+  151                     	
+  152                     	; jsr ex_vsync
+  153  00:41E1  A9 01     	lda #1
+  154  00:41E3  85 04     	sta <status
+  155  00:41E5            end_loop:
+  156                     ;loop until vsync function sets status to 0
+  157  00:41E5  A5 04     	lda <status
+  158  00:41E7  D0 FC     	bne end_loop
+  159  00:41E9  4C A7 41  	jmp main
+  160                     	
+  161  00:41EC            my_vsync:	
+  162                     	incw <frame
+       00:41EC  E6 05     	inc	<frame		; value at stated memory
+       00:41EE  D0 02     	bne	.x_00031		; location
+       00:41F0  E6 06     	inc	<frame+1
+       00:41F2            .x_00031:
+  163  00:41F2  64 04     	stz <status
+  164  00:41F4  60        	rts
+  165                     	
+  166                     ; ***************************************************************************
+  167                     ; ***************************************************************************
+  168                     ;
+  169                     ;
+  170                     
+  171                     
+  172  00:41F5            init_vdc:
+  173  00:41F5  08        	php
+  174  00:41F6  78        	sei
+  175  00:41F7  C2        	cly
+  176  00:41F8            .loop:
+  177  00:41F8  B1 F8     	lda     [_ax],y
+  178  00:41FA  F0 12     	beq     .done
+  179  00:41FC  8D 00 00  	sta     VDC_CTRL
+  180  00:41FF  C8        	iny
+  181  00:4200  B1 F8     	lda     [_ax],y
+  182  00:4202  8D 02 00  	sta     VDC_DATA_LO
+  183  00:4205  C8        	iny
+  184  00:4206  B1 F8     	lda     [_ax],y
+  185  00:4208  8D 03 00  	sta     VDC_DATA_HI
+  186  00:420B  C8        	iny
+  187  00:420C  80 EA     	bra     .loop
+  188  00:420E            .done:
+  189  00:420E  28        	plp
+  190  00:420F  60        	rts
+  191                     
+  192                     
+  193                     ; ***************************************************************************
+  194                     ; ***************************************************************************
+  195                     ;
+  196                     ;
+  197                     
+  198  00:4210            init_vce:
+  199  00:4210  08        	php
+  200  00:4211  78        	sei
+  201  00:4212  9C 02 04  	stz     VCE_ADDR_LO
+  202  00:4215  9C 03 04  	stz     VCE_ADDR_HI
+  203  00:4218  A0 02     	ldy     #$02
+  204  00:421A  82        	clx
+  205  00:421B            .loop:
+  206  00:421B  9C 04 04  	stz     VCE_DATA_LO
+  207  00:421E  9C 05 04  	stz     VCE_DATA_HI
+  208  00:4221  CA        	dex
+  209  00:4222  D0 F7     	bne     .loop
+  210  00:4224  88        	dey
+  211  00:4225  D0 F4     	bne     .loop
+  212  00:4227  A9 00     	lda     #VCE_CR_5MHz
+  213  00:4229  8D 00 04  	sta     VCE_CTRL
+  214  00:422C  28        	plp
+  215  00:422D  60        	rts
+  216                     
   217                     
-  218                     ; VDC constants for 320 & 336 wide display.
-  219                     
-  220           0001      VCE_CR_7MHz  = $01
-  221                     
-  222           0502      VDC_HSR_320  = $0502
-  223           0427      VDC_HDR_320  = $0427
-  224                     
-  225           0402      VDC_HSR_336  = $0402
-  226           0429      VDC_HDR_336  = $0429
-  227                     
-  228                     ; VDC constants for 480 & 512 wide display.
-  229                     
-  230           0002      VCE_CR_10MHz = $02
-  231                     
-  232           0C02      VDC_HSR_480  = $0C02
-  233           043C      VDC_HDR_480  = $043C
-  234                     
-  235           0B02      VDC_HSR_512  = $0B02
-  236           043F      VDC_HDR_512  = $043F
-  237                     
-  238                     ; VDC constants for 200, 224 & 240 high display.
+  218                     ; ***************************************************************************
+  219                     ; ***************************************************************************
+  220                     ;
+  221                     ;
+  222                     
+  223  00:422E            copy_palette:   
+  224  00:422E  C2        	cly
+  225  00:422F            .loop:
+  226  00:422F  B1 F8     	lda     [_ax],y
+  227  00:4231  C8        	iny
+  228  00:4232  8D 04 04  	sta     VCE_DATA_LO
+  229  00:4235  B1 F8     	lda     [_ax],y
+  230  00:4237  C8        	iny
+  231  00:4238  8D 05 04  	sta     VCE_DATA_HI
+  232  00:423B  C0 20     	cpy     #32
+  233  00:423D  D0 F0     	bne     .loop
+  234  00:423F  60        	rts
+  235                     
+  236                     
+  237                     ; ***************************************************************************
+  238                     ; ***************************************************************************
   239                     
-  240           2302      VDC_VPR_200  = $2302
-  241           00C7      VDC_VDW_200  = $00C7
-  242           0018      VDC_VCR_200  = $0018
+  240                     ; VDC constants for 240 & 256 wide display.
+  241                     
+  242           0000      VCE_CR_5MHz  = $00
   243                     
-  244           1702      VDC_VPR_224  = $1702
-  245           00DF      VDC_VDW_224  = $00DF
-  246           000C      VDC_VCR_224  = $000C
-  247                     
-  248           0F02      VDC_VPR_240  = $0F02
-  249           00EF      VDC_VDW_240  = $00EF
-  250           0004      VDC_VCR_240  = $0004 ; $00F6
+  244           0302      VDC_HSR_240  = $0302
+  245           041D      VDC_HDR_240  = $041D
+  246                     
+  247           0202      VDC_HSR_256  = $0202
+  248           041F      VDC_HDR_256  = $041F
+  249                     
+  250                     ; VDC constants for 320 & 336 wide display.
   251                     
-  252                     ; VDC constants for different BAT screen sizes.
+  252           0001      VCE_CR_7MHz  = $01
   253                     
-  254           0000      VDC_MWR_32x32  = $0000
-  255           0040      VDC_MWR_32x64  = $0040
+  254           0502      VDC_HSR_320  = $0502
+  255           0427      VDC_HDR_320  = $0427
   256                     
-  257           0010      VDC_MWR_64x32  = $0010
-  258           0050      VDC_MWR_64x64  = $0050
+  257           0402      VDC_HSR_336  = $0402
+  258           0429      VDC_HDR_336  = $0429
   259                     
-  260           0020      VDC_MWR_128x32 = $0020
-  261           0060      VDC_MWR_128x64 = $0060
-  262                     
-  263                     ; Table of VDC values to set on boot.
-  264                     
-  265  00:41D7            boot_video_mode:
-  266  00:41D7  05        	.db     VDC_CR                  ; Control Register
-  267  00:41D8  00 00     	.dw     $0000
-  268  00:41DA  06        	.db     VDC_RCR                 ; Raster Counter Register
-  269  00:41DB  00 00     	.dw     $0000
-  270  00:41DD  07        	.db     VDC_BXR                 ; Background X-Scroll Register
-  271  00:41DE  00 00     	.dw     $0000
-  272  00:41E0  08        	.db     VDC_BYR                 ; Background Y-Scroll Register
-  273  00:41E1  00 00     	.dw     $0000
-  274  00:41E3  09        	.db     VDC_MWR                 ; Memory-access Width Register
-  275  00:41E4  00 00     	.dw     VDC_MWR_32x32
-  276  00:41E6  0A        	.db     VDC_HSR                 ; Horizontal Sync Register
-  277  00:41E7  02 02     	.dw     VDC_HSR_256
-  278  00:41E9  0B        	.db     VDC_HDR                 ; Horizontal Display Register
-  279  00:41EA  1F 04     	.dw     VDC_HDR_256
-  280  00:41EC  0C        	.db     VDC_VPR                 ; Vertical Sync Register
-  281  00:41ED  02 17     	.dw     VDC_VPR_224
-  282  00:41EF  0D        	.db     VDC_VDW                 ; Vertical Display Register
-  283  00:41F0  DF 00     	.dw     VDC_VDW_224
-  284  00:41F2  0E        	.db     VDC_VCR                 ; Vertical Display END position Register
-  285  00:41F3  0C 00     	.dw     VDC_VCR_224
-  286  00:41F5  0F        	.db     VDC_DCR                 ; DMA Control Register
-  287  00:41F6  10 00     	.dw     $0010
-  288  00:41F8  13        	.db     VDC_SATB                ; SATB  address of the SATB
-  289  00:41F9  7F 00     	.dw     $007F
-  290  00:41FB  00        	.db     0
-  291                     	
-  292           0001      	.bank 1
-  293           6000      	.org $6000
-  294  01:6000            Catgirl:
-  295                     	; .incchr "gfx\catgirl.pcx"
-  296                     	
-  297           0002      	.bank 2
-  298           8000      	.org $8000
-  299  02:8000            CatgirlPal:
-  300                     	; .incpal "gfx\catgirl.pcx",0,1
+  260                     ; VDC constants for 480 & 512 wide display.
+  261                     
+  262           0002      VCE_CR_10MHz = $02
+  263                     
+  264           0C02      VDC_HSR_480  = $0C02
+  265           043C      VDC_HDR_480  = $043C
+  266                     
+  267           0B02      VDC_HSR_512  = $0B02
+  268           043F      VDC_HDR_512  = $043F
+  269                     
+  270                     ; VDC constants for 200, 224 & 240 high display.
+  271                     
+  272           2302      VDC_VPR_200  = $2302
+  273           00C7      VDC_VDW_200  = $00C7
+  274           0018      VDC_VCR_200  = $0018
+  275                     
+  276           1702      VDC_VPR_224  = $1702
+  277           00DF      VDC_VDW_224  = $00DF
+  278           000C      VDC_VCR_224  = $000C
+  279                     
+  280           0F02      VDC_VPR_240  = $0F02
+  281           00EF      VDC_VDW_240  = $00EF
+  282           0004      VDC_VCR_240  = $0004 ; $00F6
+  283                     
+  284                     ; VDC constants for different BAT screen sizes.
+  285                     
+  286           0000      VDC_MWR_32x32  = $0000
+  287           0040      VDC_MWR_32x64  = $0040
+  288                     
+  289           0010      VDC_MWR_64x32  = $0010
+  290           0050      VDC_MWR_64x64  = $0050
+  291                     
+  292           0020      VDC_MWR_128x32 = $0020
+  293           0060      VDC_MWR_128x64 = $0060
+  294                     
+  295                     ; Table of VDC values to set on boot.
+  296                     
+  297  00:4240            boot_video_mode:
+  298  00:4240  05        	.db     VDC_CR                  ; Control Register
+  299  00:4241  00 00     	.dw     $0000
+  300  00:4243  06        	.db     VDC_RCR                 ; Raster Counter Register
+  301  00:4244  00 00     	.dw     $0000
+  302  00:4246  07        	.db     VDC_BXR                 ; Background X-Scroll Register
+  303  00:4247  00 00     	.dw     $0000
+  304  00:4249  08        	.db     VDC_BYR                 ; Background Y-Scroll Register
+  305  00:424A  00 00     	.dw     $0000
+  306  00:424C  09        	.db     VDC_MWR                 ; Memory-access Width Register
+  307  00:424D  00 00     	.dw     VDC_MWR_32x32
+  308  00:424F  0A        	.db     VDC_HSR                 ; Horizontal Sync Register
+  309  00:4250  02 02     	.dw     VDC_HSR_256
+  310  00:4252  0B        	.db     VDC_HDR                 ; Horizontal Display Register
+  311  00:4253  1F 04     	.dw     VDC_HDR_256
+  312  00:4255  0C        	.db     VDC_VPR                 ; Vertical Sync Register
+  313  00:4256  02 17     	.dw     VDC_VPR_224
+  314  00:4258  0D        	.db     VDC_VDW                 ; Vertical Display Register
+  315  00:4259  DF 00     	.dw     VDC_VDW_224
+  316  00:425B  0E        	.db     VDC_VCR                 ; Vertical Display END position Register
+  317  00:425C  0C 00     	.dw     VDC_VCR_224
+  318  00:425E  0F        	.db     VDC_DCR                 ; DMA Control Register
+  319  00:425F  10 00     	.dw     $0010
+  320  00:4261  13        	.db     VDC_SATB                ; SATB  address of the SATB
+  321  00:4262  7F 00     	.dw     $007F
+  322  00:4264  00        	.db     0
+  323                     	
+  324           0001      	.bank 1
+  325           6000      	.org $6000
+  326  01:6000            Catgirl:
+  327                     	; .incchr "gfx\catgirl.pcx"
+  328                     	
+  329           0002      	.bank 2
+  330           8000      	.org $8000
+  331  02:8000            CatgirlPal:
+  332                     	; .incpal "gfx\catgirl.pcx",0,1

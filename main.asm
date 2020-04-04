@@ -26,8 +26,10 @@
 	.mlist
 	.zp
 	
-string:
-	.ds 2
+scroll_x: .ds 2
+scroll_y: .ds 2
+status: .ds 1
+frame: .ds 2
 
 	.data
 
@@ -48,14 +50,17 @@ boot:
 
 	stw     #boot_video_mode,_ax
 	jsr     init_vdc
-				
-	jsr     ex_dspon
-	jsr     ex_rcron
-	jsr     ex_irqon
-
-	jsr     ex_vsync
-	jsr     ex_vsync
 	
+	;set up vsync handler
+	stw #my_vsync,vsync_hook
+	lda #%00110000
+	sta irq_m
+	jsr ex_dspon
+	jsr ex_rcron
+	jsr ex_irqon
+	jsr ex_vsync
+	jsr ex_vsync
+
 	;load catgirl image and palette from CD
 	stz <_cl ;sector number (bits 24-16)
 	lda #HIGH(_ADDR_art) ;sector number (bits 15-8)
@@ -68,19 +73,23 @@ boot:
 	sta <_bl
 	lda #8 ;write 8 sectors
 	sta <_al
+	sei ;disable interrupts to stop them messing the cd loading up	
 	jsr cd_read
+	cli
 	
 	;play track from CD
 	lda #$80 ;play track number
 	sta <_bh
 	lda #2 ;track number to play
 	sta <_al
-	lda #$80 ;stop on track number
+	stz <_ah
+	stz <_bl
+	lda #($80 | 1) ;stop on track, infinite repeat play
 	sta <_dh
 	lda #3 ;track number to stop on
 	sta <_cl
-	lda #1 ;infinite repeat play
-	sta <_dh
+	stz <_ch
+	stz <_dl
 	jsr cd_play
 
 	;copy catgirl palette
@@ -128,9 +137,32 @@ boot:
 	dey
 	bne .loop
 	
+	
+	stwz <scroll_x
+	stwz <scroll_y
 	;main loop
 main:
-	bra main
+	decw <scroll_x
+	decw <scroll_y
+	vreg #VDC_BXR
+	stw <scroll_x,video_data
+	vreg #VDC_BYR
+	stw <scroll_y,video_data
+	
+	; jsr ex_vsync
+	lda #1
+	sta <status
+end_loop:
+;loop until vsync function sets status to 0
+	lda <status
+	bne end_loop
+	jmp main
+	
+my_vsync:	
+	incw <frame
+	stz <status
+	rts
+	
 ; ***************************************************************************
 ; ***************************************************************************
 ;
