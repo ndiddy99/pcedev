@@ -1,0 +1,12 @@
+Bank	Addr	Label
+----	----	-----
+80	0000	Tiles				
+81	0020	Map				
+f0	0003	_nb_bank			
+f0	2201	_bss_end			
+f0	0001	MAGICKIT			
+f0	0001	CDROM				
+81	0000	TilePal				
+f0	0000	DEVELO				
+f0	0080	_bank_base			
+f0	0082	_call_bank			

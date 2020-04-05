@@ -1,5 +1,5 @@
 cd C:\pce\project
-set PCE_INCLUDE=include\pce
+set PCE_INCLUDE=include
 
 python DiscMaker.py layout.xml
 REM ..\huc\bin\pceas -m -l 2 -S -cd main.asm
