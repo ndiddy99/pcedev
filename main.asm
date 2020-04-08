@@ -1,3 +1,20 @@
+; main.asm: Entry point for the game.
+; Copyright (C) 2020 Nathan Misner
+
+; This program is free software; you can redistribute it and/or
+; modify it under the terms of version 2 of the GNU General Public
+; License as published by the Free Software Foundation.
+
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, see
+; <https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt>
+
+
 ;
 ; PCEAS sets up the following values in the IPL ...
 ;
@@ -18,8 +35,11 @@
 	; CC65 hardware equates (because I prefer them).
 	.include "pce.inc"
 	
-	; CD function macros
-	.include "cd.inc"
+	; CD routines & macros
+	.include "cd.asm"
+	
+	; Scroll routines
+	.include "scroll.asm"
 
 	;asset location on cd-rom
 	.include "cd_labels.asm"
@@ -81,104 +101,44 @@ boot:
 	stw     #pal_load,<_ax
 	stw     #$0000,VCE_ADDR_LO
 	jsr     copy_palette
-
-	;copy bg data
+	
+	;copy bg tiles
 	vreg #VDC_MAWR
 	stw #$2000,video_data
 	vreg #VDC_VWR
 	tia tile_load,video_data,$2000
-
-	;tilemap uses 16x16 tiles, so make it 8x8 like the vdc expects
-	stwz <_di ;pointer to video start address
-	stw #map_load,<_si
-	lda #32 ;32 columns
-	sta <_dl
-.col_loop:
-;tile num = (num >> 3) * $20 + (num & 7) * 2
-;         = ((num & $fff8) << 2) + ((num & 7) << 1)
-	ldx #32 ;32 rows
-	cly
-.row_loop:
-	lda [<_si],y
-	sta <_al
-	;((num & 7) << 1)
-	and #$7
-	asl a
-	sta <_bl
-
-	iny
-	lda [<_si],y
-	sta <_ah
-	stz <_bh
-	iny
-	;((num & #$fff8) << 2)
-	andw <_ax,#$fff8
-	aslw <_ax
-	aslw <_ax
-	addw <_ax,<_bx
-	addw #$200,<_bx ;tile numbers start at $200
-	;correct tile number for upper left corner of 16x16 tile now in _bx
-	vreg #VDC_MAWR
-	stw <_di,video_data
-	vreg #VDC_VWR
-	stw <_bx,video_data
-	;upper right corner
-	incw <_bx
-	stw <_bx,video_data
-	;lower left corner
-	addw #$f,<_bx
-	;screen is on next row (64x64 tilemap)
-	addw #$40,<_di
-	vreg #VDC_MAWR
-	stw <_di,video_data
-	vreg #VDC_VWR
-	stw <_bx,video_data
-	;lower right corner
-	incw <_bx
-	stw <_bx,video_data
-	;restore vram address to where it should be for the next tile
-	subw #$3e,<_di ;each row is $40, so subtracting $3e is like
-	vreg #VDC_MAWR ;subtracting $40 and adding $2
-	stw <_di,video_data
-	vreg #VDC_VWR
-	dex
-	beq .done_row
-	jmp .row_loop
-.done_row:
-	lda <_dl
-	dec a
-	beq .done
-	sta <_dl
-	addw #$80,<_si ;map is 64x32, each tile index is 2 bytes
-	addw #$40,<_di ;skip every other row of the tilemap
-	jmp .col_loop
-.done:
+	; ;copy bg data
+	; ldx #18
+	; ldy #18
+	; jsr scroll_fill
 	
 	;init scroll
+	; stw #(28*16),<scroll_x
+	; stw #(19*16),<scroll_y
 	stwz <scroll_x
 	stwz <scroll_y
+	
 	;main loop
 main:
+	;d-pad up
 	bbr4 <joypad,.no_up
-	incw <scroll_y
-.no_up:
-	bbr5 <joypad,.no_right
-	decw <scroll_x
-.no_right:
-	bbr6 <joypad,.no_down
 	decw <scroll_y
-.no_down:
-	bbr7 <joypad,.no_left
+.no_up:
+	;d-pad right
+	bbr5 <joypad,.no_right
 	incw <scroll_x
+.no_right:
+	;d-pad down
+	bbr6 <joypad,.no_down
+	incw <scroll_y
+.no_down:
+	;d-pad left
+	bbr7 <joypad,.no_left
+	decw <scroll_x
 .no_left:
 
-
-	vreg #VDC_BXR
-	stw <scroll_x,video_data
-	vreg #VDC_BYR
-	stw <scroll_y,video_data
+	jsr scroll_downrow
 	
-	; jsr ex_vsync
 	lda #1
 	sta <status
 end_loop:
@@ -190,6 +150,12 @@ end_loop:
 my_vsync:	
 	incw <frame
 	stz <status
+
+	;set scroll pos
+	vreg #VDC_BXR
+	stw <scroll_x,video_data
+	vreg #VDC_BYR
+	stw <scroll_y,video_data
 	
 	lda #1 ;read joypad 1
 	jsr ex_joysns

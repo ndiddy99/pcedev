@@ -1,5 +1,18 @@
-;-----cd macros-----
+; cd.asm: CD helper functions.
+; Copyright (C) 2020 Nathan Misner
 
+; This program is free software; you can redistribute it and/or
+; modify it under the terms of version 2 of the GNU General Public
+; License as published by the Free Software Foundation.
+
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, see
+; <https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt>
 
 ;usage: cd_load [cd sector number] [bank to write to] [number of 2kb sectors to write]
 cd_load .macro
@@ -59,6 +72,6 @@ cd_track:
 	stz <_dl
 	jmp cd_play ;rts from cd_play returns to where cd_track was called
 	
-
+cd_end:
 
 	

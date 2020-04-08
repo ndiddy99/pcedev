@@ -1,53 +1,1110 @@
 #[1]   main.asm
-   34           2000      	.zp
-   35                     	
-   36  --:2000            	scroll_x: .ds 2
-   37  --:2002            	scroll_y: .ds 2
-   38  --:2004            	status: .ds 1
-   39  --:2005            	frame: .ds 2
-   40  --:2007            	joypad: .ds 1
-   41  --:2008            	joyedge: .ds 1 ;1 when pad transitioned from 0 to 1
-   42                     
-   43           E000      	.data
-   44                     
-   45           602F      	.code
-   46           0000      	.bank   0
-   47           4070      	.org    $4070
-   48                     
-   49                     ;
-   50                     ;
-   51                     ;
-   52  00:4070            boot:
-   53  00:4070  20 99 E0  	jsr     ex_dspoff
-   54  00:4073  20 81 E0  	jsr     ex_rcroff
-   55  00:4076  20 87 E0  	jsr     ex_irqoff
-   56  00:4079  20 30 E0  	jsr     ad_reset
-   57                     
-   58  00:407C  20 A6 42  	jsr     init_vce
-   59                     
-   60                     	stw     #boot_video_mode,_ax
-       00:407F  A9 D6     	lda	LOW_BYTE #boot_video_mode
+   18           0001      	.bank 1
+   19           602F      	.code
+   20           602F      	.org cd_end
+   21                     
+   22           000E      NUM_ROWS equ 14 ;14 rows (256x224 resolution, 224/16)
+   23           0010      NUM_COLS equ 16 ;16 columns (256x224 resolution, 256/16)
+   24           0040      MAP_WIDTH equ 64
+   25           0020      MAP_HEIGHT equ 32
+   26                     
+   27                     ;writes the given coords to vram starting at scroll pos 0,0 and filling
+   28                     ;the whole screen
+   29                     ;x: x tile num
+   30                     ;y: y tile num
+   31  01:602F            scroll_fill:
+   32                     	;map location is (y * MAP_WIDTH * 2) + x * 2
+   33  01:602F  84 EF     	sty <_si+1
+   34                     	lsrw <_si ;128 (MAP_WIDTH * 2) is 2^7 so copy to high byte and shift right once
+       01:6031  46 EF     	lsr	<_si+1		; value (at stated memory
+       01:6033  66 EE     	ror	<_si		; location)
+   35  01:6035  8A        	txa
+   36  01:6036  0A        	asl a
+   37  01:6037  18        	clc
+   38  01:6038  65 EE     	adc <_si
+   39  01:603A  85 EE     	sta <_si
+   40  01:603C  A5 EF     	lda <_si+1
+   41  01:603E  69 00     	adc #0
+   42  01:6040  85 EF     	sta <_si+1
+   43                     
+   44                     	;tilemap uses 16x16 tiles, so make it 8x8 like the vdc expects
+   45                     	stwz <_di ;pointer to video start address
+       01:6042  64 F0     	stz	LOW_BYTE <_di
+       01:6044  64 F1     	stz	HIGH_BYTE <_di
+   46                     	addw #map_load,<_si
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:6046  18        	clc
+       01:6047  A5 EE     	lda	LOW_BYTE <_si
+       01:6049  69 20     	adc	LOW_BYTE #map_load
+       01:604B  85 EE     	sta	LOW_BYTE <_si
+       01:604D  A5 EF     	lda	HIGH_BYTE <_si
+       01:604F  69 A0     	adc	HIGH_BYTE #map_load
+       01:6051  85 EF     	sta	HIGH_BYTE <_si
+                          .endif
+   47  01:6053  A9 0E     	lda #NUM_ROWS 
+   48  01:6055  85 FE     	sta <_dl
+   49  01:6057            .col_loop:
+   50                     ;tile num = (num >> 3) * $20 + (num & 7) * 2
+   51                     ;         = ((num & $fff8) << 2) + ((num & 7) << 1)
+   52  01:6057  A2 10     	ldx #NUM_COLS
+   53  01:6059  C2        	cly
+   54  01:605A            .row_loop:
+   55  01:605A  B1 EE     	lda [<_si],y
+   56  01:605C  85 F8     	sta <_al ;_ax is the first "num"
+   57                     	;((num & 7) << 1)
+   58  01:605E  29 07     	and #$7
+   59  01:6060  0A        	asl a
+   60  01:6061  85 FA     	sta <_bl ;_bx is the second "num"
+   61                     
+   62  01:6063  C8        	iny
+   63  01:6064  B1 EE     	lda [<_si],y
+   64  01:6066  85 F9     	sta <_ah
+   65  01:6068  64 FB     	stz <_bh
+   66  01:606A  C8        	iny
+   67                     	;((num & #$fff8) << 2)
+   68                     	andw <_ax,#$fff8
+       01:606B  A5 F8     	lda	LOW_BYTE <_ax
+       01:606D  29 F8     	and LOW_BYTE #$fff8
+       01:606F  85 F8     	sta LOW_BYTE <_ax
+       01:6071  A5 F9     	lda HIGH_BYTE <_ax
+       01:6073  29 FF     	and HIGH_BYTE #$fff8
+       01:6075  85 F9     	sta HIGH_BYTE <_ax
+   69                     	aslw <_ax
+       01:6077  06 F8     	asl	<_ax		; word-sized value (at stated
+       01:6079  26 F9     	rol	<_ax+1		; memory location)
+   70                     	aslw <_ax
+       01:607B  06 F8     	asl	<_ax		; word-sized value (at stated
+       01:607D  26 F9     	rol	<_ax+1		; memory location)
+   71                     	addw <_ax,<_bx
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:607F  18        	clc
+       01:6080  A5 FA     	lda	LOW_BYTE <_bx
+       01:6082  65 F8     	adc	LOW_BYTE <_ax
+       01:6084  85 FA     	sta	LOW_BYTE <_bx
+       01:6086  A5 FB     	lda	HIGH_BYTE <_bx
+       01:6088  65 F9     	adc	HIGH_BYTE <_ax
+       01:608A  85 FB     	sta	HIGH_BYTE <_bx
+                          .endif
+   72                     	addw #$200,<_bx ;tile numbers start at $200
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:608C  18        	clc
+       01:608D  A5 FA     	lda	LOW_BYTE <_bx
+       01:608F  69 00     	adc	LOW_BYTE #$200
+       01:6091  85 FA     	sta	LOW_BYTE <_bx
+       01:6093  A5 FB     	lda	HIGH_BYTE <_bx
+       01:6095  69 02     	adc	HIGH_BYTE #$200
+       01:6097  85 FB     	sta	HIGH_BYTE <_bx
+                          .endif
+   73                     	;correct tile number for upper left corner of 16x16 tile now in _bx
+   74                     	vreg #VDC_MAWR
+       01:6099  A9 00     	lda	#VDC_MAWR
+       01:609B  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:609D  03 00     	st0	#VDC_MAWR
+                          .else
+                          .endif
+   75                     	stw <_di,video_data
+       01:609F  A5 F0     	lda	LOW_BYTE <_di
+       01:60A1  8D 02 00  	sta	LOW_BYTE video_data
+       01:60A4  A5 F1     	lda	HIGH_BYTE <_di
+       01:60A6  8D 03 00  	sta	HIGH_BYTE video_data
+   76                     	vreg #VDC_VWR
+       01:60A9  A9 02     	lda	#VDC_VWR
+       01:60AB  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:60AD  03 02     	st0	#VDC_VWR
+                          .else
+                          .endif
+   77                     	stw <_bx,video_data
+       01:60AF  A5 FA     	lda	LOW_BYTE <_bx
+       01:60B1  8D 02 00  	sta	LOW_BYTE video_data
+       01:60B4  A5 FB     	lda	HIGH_BYTE <_bx
+       01:60B6  8D 03 00  	sta	HIGH_BYTE video_data
+   78                     	;upper right corner
+   79                     	incw <_bx
+       01:60B9  E6 FA     	inc	<_bx		; value at stated memory
+       01:60BB  D0 02     	bne	.x_00013		; location
+       01:60BD  E6 FB     	inc	<_bx+1
+       01:60BF            .x_00013:
+   80                     	stw <_bx,video_data
+       01:60BF  A5 FA     	lda	LOW_BYTE <_bx
+       01:60C1  8D 02 00  	sta	LOW_BYTE video_data
+       01:60C4  A5 FB     	lda	HIGH_BYTE <_bx
+       01:60C6  8D 03 00  	sta	HIGH_BYTE video_data
+   81                     	;lower left corner
+   82                     	addw #$f,<_bx
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:60C9  18        	clc
+       01:60CA  A5 FA     	lda	LOW_BYTE <_bx
+       01:60CC  69 0F     	adc	LOW_BYTE #$f
+       01:60CE  85 FA     	sta	LOW_BYTE <_bx
+       01:60D0  A5 FB     	lda	HIGH_BYTE <_bx
+       01:60D2  69 00     	adc	HIGH_BYTE #$f
+       01:60D4  85 FB     	sta	HIGH_BYTE <_bx
+                          .endif
+   83                     	;screen is on next row (64x64 tilemap)
+   84                     	addw #$40,<_di
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:60D6  18        	clc
+       01:60D7  A5 F0     	lda	LOW_BYTE <_di
+       01:60D9  69 40     	adc	LOW_BYTE #$40
+       01:60DB  85 F0     	sta	LOW_BYTE <_di
+       01:60DD  A5 F1     	lda	HIGH_BYTE <_di
+       01:60DF  69 00     	adc	HIGH_BYTE #$40
+       01:60E1  85 F1     	sta	HIGH_BYTE <_di
+                          .endif
+   85                     	vreg #VDC_MAWR
+       01:60E3  A9 00     	lda	#VDC_MAWR
+       01:60E5  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:60E7  03 00     	st0	#VDC_MAWR
+                          .else
+                          .endif
+   86                     	stw <_di,video_data
+       01:60E9  A5 F0     	lda	LOW_BYTE <_di
+       01:60EB  8D 02 00  	sta	LOW_BYTE video_data
+       01:60EE  A5 F1     	lda	HIGH_BYTE <_di
+       01:60F0  8D 03 00  	sta	HIGH_BYTE video_data
+   87                     	vreg #VDC_VWR
+       01:60F3  A9 02     	lda	#VDC_VWR
+       01:60F5  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:60F7  03 02     	st0	#VDC_VWR
+                          .else
+                          .endif
+   88                     	stw <_bx,video_data
+       01:60F9  A5 FA     	lda	LOW_BYTE <_bx
+       01:60FB  8D 02 00  	sta	LOW_BYTE video_data
+       01:60FE  A5 FB     	lda	HIGH_BYTE <_bx
+       01:6100  8D 03 00  	sta	HIGH_BYTE video_data
+   89                     	;lower right corner
+   90                     	incw <_bx
+       01:6103  E6 FA     	inc	<_bx		; value at stated memory
+       01:6105  D0 02     	bne	.x_00021		; location
+       01:6107  E6 FB     	inc	<_bx+1
+       01:6109            .x_00021:
+   91                     	stw <_bx,video_data
+       01:6109  A5 FA     	lda	LOW_BYTE <_bx
+       01:610B  8D 02 00  	sta	LOW_BYTE video_data
+       01:610E  A5 FB     	lda	HIGH_BYTE <_bx
+       01:6110  8D 03 00  	sta	HIGH_BYTE video_data
+   92                     	;restore vram address to where it should be for the next tile
+   93                     	subw #$3e,<_di ;each row is $40, so subtracting $3e is like
+       01:6113  38        	sec
+       01:6114  A5 F0     	lda	LOW_BYTE <_di
+       01:6116  E9 3E     	sbc	LOW_BYTE #$3e
+       01:6118  85 F0     	sta	LOW_BYTE <_di
+       01:611A  A5 F1     	lda	HIGH_BYTE <_di
+       01:611C  E9 00     	sbc	HIGH_BYTE #$3e
+       01:611E  85 F1     	sta	HIGH_BYTE <_di
+   94                     	vreg #VDC_MAWR ;subtracting $40 and adding $2
+       01:6120  A9 00     	lda	#VDC_MAWR
+       01:6122  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:6124  03 00     	st0	#VDC_MAWR
+                          .else
+                          .endif
+   95                     	stw <_di,video_data
+       01:6126  A5 F0     	lda	LOW_BYTE <_di
+       01:6128  8D 02 00  	sta	LOW_BYTE video_data
+       01:612B  A5 F1     	lda	HIGH_BYTE <_di
+       01:612D  8D 03 00  	sta	HIGH_BYTE video_data
+   96                     	vreg #VDC_VWR
+       01:6130  A9 02     	lda	#VDC_VWR
+       01:6132  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:6134  03 02     	st0	#VDC_VWR
+                          .else
+                          .endif
+   97  01:6136  CA        	dex
+   98  01:6137  F0 03     	beq .done_row
+   99  01:6139  4C 5A 60  	jmp .row_loop
+  100  01:613C            .done_row:
+  101  01:613C  A5 FE     	lda <_dl
+  102  01:613E  3A        	dec a
+  103  01:613F  F0 1F     	beq .done
+  104  01:6141  85 FE     	sta <_dl
+  105                     	addw #(MAP_WIDTH * 2),<_si ;map is 64x32, each tile index is 2 bytes
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:6143  18        	clc
+       01:6144  A5 EE     	lda	LOW_BYTE <_si
+       01:6146  69 80     	adc	LOW_BYTE #(MAP_WIDTH * 2)
+       01:6148  85 EE     	sta	LOW_BYTE <_si
+       01:614A  A5 EF     	lda	HIGH_BYTE <_si
+       01:614C  69 00     	adc	HIGH_BYTE #(MAP_WIDTH * 2)
+       01:614E  85 EF     	sta	HIGH_BYTE <_si
+                          .endif
+  106                     	addw #(MAP_WIDTH-NUM_COLS)*2,<_di ;skip every other row of the tilemap, plus the remainder
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:6150  18        	clc
+       01:6151  A5 F0     	lda	LOW_BYTE <_di
+       01:6153  69 60     	adc	LOW_BYTE #(MAP_WIDTH-NUM_COLS)*2
+       01:6155  85 F0     	sta	LOW_BYTE <_di
+       01:6157  A5 F1     	lda	HIGH_BYTE <_di
+       01:6159  69 00     	adc	HIGH_BYTE #(MAP_WIDTH-NUM_COLS)*2
+       01:615B  85 F1     	sta	HIGH_BYTE <_di
+                          .endif
+  107  01:615D  4C 57 60  	jmp .col_loop  ;left over from this tilemap
+  108  01:6160            .done:
+  109  01:6160  60        	rts
+  110                     	
+  111                     ;copies a single row into vram above the viewable area
+  112  01:6161            scroll_uprow:
+  113                     ;map location is (((scroll_y >> 4) - 1) * MAP_WIDTH * 2) + (scroll_x >> 4) * 2
+  114                     ;             or (((scroll_y & $fff0) << 3) - 128) + ((scroll_x >> 3) & $fffe)
+  115                     	stw <scroll_y,<_si
+       01:6161  A5 02     	lda	LOW_BYTE <scroll_y
+       01:6163  85 EE     	sta	LOW_BYTE <_si
+       01:6165  A5 03     	lda	HIGH_BYTE <scroll_y
+       01:6167  85 EF     	sta	HIGH_BYTE <_si
+  116                     	andw <_si,#$fff0
+       01:6169  A5 EE     	lda	LOW_BYTE <_si
+       01:616B  29 F0     	and LOW_BYTE #$fff0
+       01:616D  85 EE     	sta LOW_BYTE <_si
+       01:616F  A5 EF     	lda HIGH_BYTE <_si
+       01:6171  29 FF     	and HIGH_BYTE #$fff0
+       01:6173  85 EF     	sta HIGH_BYTE <_si
+  117                     	aslw <_si
+       01:6175  06 EE     	asl	<_si		; word-sized value (at stated
+       01:6177  26 EF     	rol	<_si+1		; memory location)
+  118                     	aslw <_si
+       01:6179  06 EE     	asl	<_si		; word-sized value (at stated
+       01:617B  26 EF     	rol	<_si+1		; memory location)
+  119                     	aslw <_si
+       01:617D  06 EE     	asl	<_si		; word-sized value (at stated
+       01:617F  26 EF     	rol	<_si+1		; memory location)
+  120                     	subw #128,<_si ;MAP_WIDTH * 2
+       01:6181  38        	sec
+       01:6182  A5 EE     	lda	LOW_BYTE <_si
+       01:6184  E9 80     	sbc	LOW_BYTE #128
+       01:6186  85 EE     	sta	LOW_BYTE <_si
+       01:6188  A5 EF     	lda	HIGH_BYTE <_si
+       01:618A  E9 00     	sbc	HIGH_BYTE #128
+       01:618C  85 EF     	sta	HIGH_BYTE <_si
+  121                     	stw <scroll_x,<_ax
+       01:618E  A5 00     	lda	LOW_BYTE <scroll_x
+       01:6190  85 F8     	sta	LOW_BYTE <_ax
+       01:6192  A5 01     	lda	HIGH_BYTE <scroll_x
+       01:6194  85 F9     	sta	HIGH_BYTE <_ax
+  122                     	lsrw <_ax
+       01:6196  46 F9     	lsr	<_ax+1		; value (at stated memory
+       01:6198  66 F8     	ror	<_ax		; location)
+  123                     	lsrw <_ax
+       01:619A  46 F9     	lsr	<_ax+1		; value (at stated memory
+       01:619C  66 F8     	ror	<_ax		; location)
+  124                     	lsrw <_ax
+       01:619E  46 F9     	lsr	<_ax+1		; value (at stated memory
+       01:61A0  66 F8     	ror	<_ax		; location)
+  125                     	andw <_ax,#$fffe
+       01:61A2  A5 F8     	lda	LOW_BYTE <_ax
+       01:61A4  29 FE     	and LOW_BYTE #$fffe
+       01:61A6  85 F8     	sta LOW_BYTE <_ax
+       01:61A8  A5 F9     	lda HIGH_BYTE <_ax
+       01:61AA  29 FF     	and HIGH_BYTE #$fffe
+       01:61AC  85 F9     	sta HIGH_BYTE <_ax
+  126                     	addw <_ax,<_si
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:61AE  18        	clc
+       01:61AF  A5 EE     	lda	LOW_BYTE <_si
+       01:61B1  65 F8     	adc	LOW_BYTE <_ax
+       01:61B3  85 EE     	sta	LOW_BYTE <_si
+       01:61B5  A5 EF     	lda	HIGH_BYTE <_si
+       01:61B7  65 F9     	adc	HIGH_BYTE <_ax
+       01:61B9  85 EF     	sta	HIGH_BYTE <_si
+                          .endif
+  127                     	addw #map_load,<_si
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:61BB  18        	clc
+       01:61BC  A5 EE     	lda	LOW_BYTE <_si
+       01:61BE  69 20     	adc	LOW_BYTE #map_load
+       01:61C0  85 EE     	sta	LOW_BYTE <_si
+       01:61C2  A5 EF     	lda	HIGH_BYTE <_si
+       01:61C4  69 A0     	adc	HIGH_BYTE #map_load
+       01:61C6  85 EF     	sta	HIGH_BYTE <_si
+                          .endif
+  128                     	
+  129                     ;destination in vram is (((scroll_y & $1f0) << 3) - $80) + ((scroll_x & $1f0) >> 3)
+  130                     	stw <scroll_y,<_di
+       01:61C8  A5 02     	lda	LOW_BYTE <scroll_y
+       01:61CA  85 F0     	sta	LOW_BYTE <_di
+       01:61CC  A5 03     	lda	HIGH_BYTE <scroll_y
+       01:61CE  85 F1     	sta	HIGH_BYTE <_di
+  131                     	andw <_di,#$1f0
+       01:61D0  A5 F0     	lda	LOW_BYTE <_di
+       01:61D2  29 F0     	and LOW_BYTE #$1f0
+       01:61D4  85 F0     	sta LOW_BYTE <_di
+       01:61D6  A5 F1     	lda HIGH_BYTE <_di
+       01:61D8  29 01     	and HIGH_BYTE #$1f0
+       01:61DA  85 F1     	sta HIGH_BYTE <_di
+  132                     	aslw <_di
+       01:61DC  06 F0     	asl	<_di		; word-sized value (at stated
+       01:61DE  26 F1     	rol	<_di+1		; memory location)
+  133                     	aslw <_di
+       01:61E0  06 F0     	asl	<_di		; word-sized value (at stated
+       01:61E2  26 F1     	rol	<_di+1		; memory location)
+  134                     	aslw <_di
+       01:61E4  06 F0     	asl	<_di		; word-sized value (at stated
+       01:61E6  26 F1     	rol	<_di+1		; memory location)
+  135                     	subw #$80,<_di
+       01:61E8  38        	sec
+       01:61E9  A5 F0     	lda	LOW_BYTE <_di
+       01:61EB  E9 80     	sbc	LOW_BYTE #$80
+       01:61ED  85 F0     	sta	LOW_BYTE <_di
+       01:61EF  A5 F1     	lda	HIGH_BYTE <_di
+       01:61F1  E9 00     	sbc	HIGH_BYTE #$80
+       01:61F3  85 F1     	sta	HIGH_BYTE <_di
+  136                     	stw <scroll_x,<_ax
+       01:61F5  A5 00     	lda	LOW_BYTE <scroll_x
+       01:61F7  85 F8     	sta	LOW_BYTE <_ax
+       01:61F9  A5 01     	lda	HIGH_BYTE <scroll_x
+       01:61FB  85 F9     	sta	HIGH_BYTE <_ax
+  137                     	andw <_ax,#$1f0
+       01:61FD  A5 F8     	lda	LOW_BYTE <_ax
+       01:61FF  29 F0     	and LOW_BYTE #$1f0
+       01:6201  85 F8     	sta LOW_BYTE <_ax
+       01:6203  A5 F9     	lda HIGH_BYTE <_ax
+       01:6205  29 01     	and HIGH_BYTE #$1f0
+       01:6207  85 F9     	sta HIGH_BYTE <_ax
+  138                     	lsrw <_ax
+       01:6209  46 F9     	lsr	<_ax+1		; value (at stated memory
+       01:620B  66 F8     	ror	<_ax		; location)
+  139                     	lsrw <_ax
+       01:620D  46 F9     	lsr	<_ax+1		; value (at stated memory
+       01:620F  66 F8     	ror	<_ax		; location)
+  140                     	lsrw <_ax
+       01:6211  46 F9     	lsr	<_ax+1		; value (at stated memory
+       01:6213  66 F8     	ror	<_ax		; location)
+  141                     	addw <_ax,<_di
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:6215  18        	clc
+       01:6216  A5 F0     	lda	LOW_BYTE <_di
+       01:6218  65 F8     	adc	LOW_BYTE <_ax
+       01:621A  85 F0     	sta	LOW_BYTE <_di
+       01:621C  A5 F1     	lda	HIGH_BYTE <_di
+       01:621E  65 F9     	adc	HIGH_BYTE <_ax
+       01:6220  85 F1     	sta	HIGH_BYTE <_di
+                          .endif
+  142                     	andw <_di,#$fff ;keep it in the tilemap range
+       01:6222  A5 F0     	lda	LOW_BYTE <_di
+       01:6224  29 FF     	and LOW_BYTE #$fff
+       01:6226  85 F0     	sta LOW_BYTE <_di
+       01:6228  A5 F1     	lda HIGH_BYTE <_di
+       01:622A  29 0F     	and HIGH_BYTE #$fff
+       01:622C  85 F1     	sta HIGH_BYTE <_di
+  143                     	;column number in cx
+  144                     	stw <_ax,<_cx
+       01:622E  A5 F8     	lda	LOW_BYTE <_ax
+       01:6230  85 FC     	sta	LOW_BYTE <_cx
+       01:6232  A5 F9     	lda	HIGH_BYTE <_ax
+       01:6234  85 FD     	sta	HIGH_BYTE <_cx
+  145                     	lsrw <_cx
+       01:6236  46 FD     	lsr	<_cx+1		; value (at stated memory
+       01:6238  66 FC     	ror	<_cx		; location)
+  146                     	;want to keep track of when we're on a 32 tile boundary
+  147  01:623A  A5 FC     	lda <_cl
+  148  01:623C  29 1F     	and #$1f
+  149  01:623E  85 FC     	sta <_cl
+  150                     	
+  151                     ;tile num = (num >> 3) * $20 + (num & 7) * 2
+  152                     ;         = ((num & $fff8) << 2) + ((num & 7) << 1)
+  153  01:6240  A2 10     	ldx #NUM_COLS
+  154  01:6242  C2        	cly
+  155  01:6243            .row_loop:
+  156  01:6243  B1 EE     	lda [<_si],y
+  157  01:6245  85 F8     	sta <_al ;_ax is the first "num"
+  158                     	;((num & 7) << 1)
+  159  01:6247  29 07     	and #$7
+  160  01:6249  0A        	asl a
+  161  01:624A  85 FA     	sta <_bl ;_bx is the second "num"
+  162                     
+  163  01:624C  C8        	iny
+  164  01:624D  B1 EE     	lda [<_si],y
+  165  01:624F  85 F9     	sta <_ah
+  166  01:6251  64 FB     	stz <_bh
+  167  01:6253  C8        	iny
+  168                     	;((num & #$fff8) << 2)
+  169                     	andw <_ax,#$fff8
+       01:6254  A5 F8     	lda	LOW_BYTE <_ax
+       01:6256  29 F8     	and LOW_BYTE #$fff8
+       01:6258  85 F8     	sta LOW_BYTE <_ax
+       01:625A  A5 F9     	lda HIGH_BYTE <_ax
+       01:625C  29 FF     	and HIGH_BYTE #$fff8
+       01:625E  85 F9     	sta HIGH_BYTE <_ax
+  170                     	aslw <_ax
+       01:6260  06 F8     	asl	<_ax		; word-sized value (at stated
+       01:6262  26 F9     	rol	<_ax+1		; memory location)
+  171                     	aslw <_ax
+       01:6264  06 F8     	asl	<_ax		; word-sized value (at stated
+       01:6266  26 F9     	rol	<_ax+1		; memory location)
+  172                     	addw <_ax,<_bx
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:6268  18        	clc
+       01:6269  A5 FA     	lda	LOW_BYTE <_bx
+       01:626B  65 F8     	adc	LOW_BYTE <_ax
+       01:626D  85 FA     	sta	LOW_BYTE <_bx
+       01:626F  A5 FB     	lda	HIGH_BYTE <_bx
+       01:6271  65 F9     	adc	HIGH_BYTE <_ax
+       01:6273  85 FB     	sta	HIGH_BYTE <_bx
+                          .endif
+  173                     	addw #$200,<_bx ;tile numbers start at $200
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:6275  18        	clc
+       01:6276  A5 FA     	lda	LOW_BYTE <_bx
+       01:6278  69 00     	adc	LOW_BYTE #$200
+       01:627A  85 FA     	sta	LOW_BYTE <_bx
+       01:627C  A5 FB     	lda	HIGH_BYTE <_bx
+       01:627E  69 02     	adc	HIGH_BYTE #$200
+       01:6280  85 FB     	sta	HIGH_BYTE <_bx
+                          .endif
+  174                     	;correct tile number for upper left corner of 16x16 tile now in _bx
+  175                     	vreg #VDC_MAWR
+       01:6282  A9 00     	lda	#VDC_MAWR
+       01:6284  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:6286  03 00     	st0	#VDC_MAWR
+                          .else
+                          .endif
+  176                     	stw <_di,video_data
+       01:6288  A5 F0     	lda	LOW_BYTE <_di
+       01:628A  8D 02 00  	sta	LOW_BYTE video_data
+       01:628D  A5 F1     	lda	HIGH_BYTE <_di
+       01:628F  8D 03 00  	sta	HIGH_BYTE video_data
+  177                     	vreg #VDC_VWR
+       01:6292  A9 02     	lda	#VDC_VWR
+       01:6294  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:6296  03 02     	st0	#VDC_VWR
+                          .else
+                          .endif
+  178                     	stw <_bx,video_data
+       01:6298  A5 FA     	lda	LOW_BYTE <_bx
+       01:629A  8D 02 00  	sta	LOW_BYTE video_data
+       01:629D  A5 FB     	lda	HIGH_BYTE <_bx
+       01:629F  8D 03 00  	sta	HIGH_BYTE video_data
+  179                     	;upper right corner
+  180                     	incw <_bx
+       01:62A2  E6 FA     	inc	<_bx		; value at stated memory
+       01:62A4  D0 02     	bne	.x_00066		; location
+       01:62A6  E6 FB     	inc	<_bx+1
+       01:62A8            .x_00066:
+  181                     	stw <_bx,video_data
+       01:62A8  A5 FA     	lda	LOW_BYTE <_bx
+       01:62AA  8D 02 00  	sta	LOW_BYTE video_data
+       01:62AD  A5 FB     	lda	HIGH_BYTE <_bx
+       01:62AF  8D 03 00  	sta	HIGH_BYTE video_data
+  182                     	;lower left corner
+  183                     	addw #$f,<_bx
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:62B2  18        	clc
+       01:62B3  A5 FA     	lda	LOW_BYTE <_bx
+       01:62B5  69 0F     	adc	LOW_BYTE #$f
+       01:62B7  85 FA     	sta	LOW_BYTE <_bx
+       01:62B9  A5 FB     	lda	HIGH_BYTE <_bx
+       01:62BB  69 00     	adc	HIGH_BYTE #$f
+       01:62BD  85 FB     	sta	HIGH_BYTE <_bx
+                          .endif
+  184                     	;screen is on next row (64x64 tilemap)
+  185                     	addw #$40,<_di
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:62BF  18        	clc
+       01:62C0  A5 F0     	lda	LOW_BYTE <_di
+       01:62C2  69 40     	adc	LOW_BYTE #$40
+       01:62C4  85 F0     	sta	LOW_BYTE <_di
+       01:62C6  A5 F1     	lda	HIGH_BYTE <_di
+       01:62C8  69 00     	adc	HIGH_BYTE #$40
+       01:62CA  85 F1     	sta	HIGH_BYTE <_di
+                          .endif
+  186                     	vreg #VDC_MAWR
+       01:62CC  A9 00     	lda	#VDC_MAWR
+       01:62CE  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:62D0  03 00     	st0	#VDC_MAWR
+                          .else
+                          .endif
+  187                     	stw <_di,video_data
+       01:62D2  A5 F0     	lda	LOW_BYTE <_di
+       01:62D4  8D 02 00  	sta	LOW_BYTE video_data
+       01:62D7  A5 F1     	lda	HIGH_BYTE <_di
+       01:62D9  8D 03 00  	sta	HIGH_BYTE video_data
+  188                     	vreg #VDC_VWR
+       01:62DC  A9 02     	lda	#VDC_VWR
+       01:62DE  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:62E0  03 02     	st0	#VDC_VWR
+                          .else
+                          .endif
+  189                     	stw <_bx,video_data
+       01:62E2  A5 FA     	lda	LOW_BYTE <_bx
+       01:62E4  8D 02 00  	sta	LOW_BYTE video_data
+       01:62E7  A5 FB     	lda	HIGH_BYTE <_bx
+       01:62E9  8D 03 00  	sta	HIGH_BYTE video_data
+  190                     	;lower right corner
+  191                     	incw <_bx
+       01:62EC  E6 FA     	inc	<_bx		; value at stated memory
+       01:62EE  D0 02     	bne	.x_00074		; location
+       01:62F0  E6 FB     	inc	<_bx+1
+       01:62F2            .x_00074:
+  192                     	stw <_bx,video_data
+       01:62F2  A5 FA     	lda	LOW_BYTE <_bx
+       01:62F4  8D 02 00  	sta	LOW_BYTE video_data
+       01:62F7  A5 FB     	lda	HIGH_BYTE <_bx
+       01:62F9  8D 03 00  	sta	HIGH_BYTE video_data
+  193                     	;restore vram address to where it should be for the next tile
+  194  01:62FC  A5 FC     	lda <_cl
+  195  01:62FE  C9 1F     	cmp #$1f
+  196  01:6300  D0 11     	bne .normal_subtract
+  197                     	subw #$7e,<_di ;subtract 1 extra row to compensate for the border
+       01:6302  38        	sec
+       01:6303  A5 F0     	lda	LOW_BYTE <_di
+       01:6305  E9 7E     	sbc	LOW_BYTE #$7e
+       01:6307  85 F0     	sta	LOW_BYTE <_di
+       01:6309  A5 F1     	lda	HIGH_BYTE <_di
+       01:630B  E9 00     	sbc	HIGH_BYTE #$7e
+       01:630D  85 F1     	sta	HIGH_BYTE <_di
+  198  01:630F  64 FC     	stz <_cl
+  199  01:6311  80 0D     	bra .done_subtract
+  200  01:6313            .normal_subtract:
+  201                     	subw #$3e,<_di ;each row is $40, so subtracting $3e is like
+       01:6313  38        	sec
+       01:6314  A5 F0     	lda	LOW_BYTE <_di
+       01:6316  E9 3E     	sbc	LOW_BYTE #$3e
+       01:6318  85 F0     	sta	LOW_BYTE <_di
+       01:631A  A5 F1     	lda	HIGH_BYTE <_di
+       01:631C  E9 00     	sbc	HIGH_BYTE #$3e
+       01:631E  85 F1     	sta	HIGH_BYTE <_di
+  202  01:6320            .done_subtract:
+  203                     	vreg #VDC_MAWR ;subtracting $40 and adding $2
+       01:6320  A9 00     	lda	#VDC_MAWR
+       01:6322  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:6324  03 00     	st0	#VDC_MAWR
+                          .else
+                          .endif
+  204                     	stw <_di,video_data
+       01:6326  A5 F0     	lda	LOW_BYTE <_di
+       01:6328  8D 02 00  	sta	LOW_BYTE video_data
+       01:632B  A5 F1     	lda	HIGH_BYTE <_di
+       01:632D  8D 03 00  	sta	HIGH_BYTE video_data
+  205                     	vreg #VDC_VWR
+       01:6330  A9 02     	lda	#VDC_VWR
+       01:6332  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:6334  03 02     	st0	#VDC_VWR
+                          .else
+                          .endif
+  206  01:6336  E6 FC     	inc <_cl
+  207  01:6338  CA        	dex
+  208  01:6339  F0 03     	beq .done_row
+  209  01:633B  4C 43 62  	jmp .row_loop
+  210  01:633E            .done_row:
+  211  01:633E  60        	rts
+  212                     	
+  213                     ;copies a single row into vram below the viewable area
+  214  01:633F            scroll_downrow:
+  215                     ;map location is (((scroll_y >> 4) + NUM_ROWS + 1) * MAP_WIDTH * 2) + (scroll_x >> 4) * 2
+  216                     ;             or (((scroll_y & $fff0) << 3) + 1920) + ((scroll_x >> 3) & $fffe)
+  217                     	stw <scroll_y,<_si
+       01:633F  A5 02     	lda	LOW_BYTE <scroll_y
+       01:6341  85 EE     	sta	LOW_BYTE <_si
+       01:6343  A5 03     	lda	HIGH_BYTE <scroll_y
+       01:6345  85 EF     	sta	HIGH_BYTE <_si
+  218                     	andw <_si,#$fff0
+       01:6347  A5 EE     	lda	LOW_BYTE <_si
+       01:6349  29 F0     	and LOW_BYTE #$fff0
+       01:634B  85 EE     	sta LOW_BYTE <_si
+       01:634D  A5 EF     	lda HIGH_BYTE <_si
+       01:634F  29 FF     	and HIGH_BYTE #$fff0
+       01:6351  85 EF     	sta HIGH_BYTE <_si
+  219                     	aslw <_si
+       01:6353  06 EE     	asl	<_si		; word-sized value (at stated
+       01:6355  26 EF     	rol	<_si+1		; memory location)
+  220                     	aslw <_si
+       01:6357  06 EE     	asl	<_si		; word-sized value (at stated
+       01:6359  26 EF     	rol	<_si+1		; memory location)
+  221                     	aslw <_si
+       01:635B  06 EE     	asl	<_si		; word-sized value (at stated
+       01:635D  26 EF     	rol	<_si+1		; memory location)
+  222                     	addw #1920,<_si ;MAP_WIDTH * 2 * (NUM_ROWS + 1)
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:635F  18        	clc
+       01:6360  A5 EE     	lda	LOW_BYTE <_si
+       01:6362  69 80     	adc	LOW_BYTE #1920
+       01:6364  85 EE     	sta	LOW_BYTE <_si
+       01:6366  A5 EF     	lda	HIGH_BYTE <_si
+       01:6368  69 07     	adc	HIGH_BYTE #1920
+       01:636A  85 EF     	sta	HIGH_BYTE <_si
+                          .endif
+  223                     	stw <scroll_x,<_ax
+       01:636C  A5 00     	lda	LOW_BYTE <scroll_x
+       01:636E  85 F8     	sta	LOW_BYTE <_ax
+       01:6370  A5 01     	lda	HIGH_BYTE <scroll_x
+       01:6372  85 F9     	sta	HIGH_BYTE <_ax
+  224                     	lsrw <_ax
+       01:6374  46 F9     	lsr	<_ax+1		; value (at stated memory
+       01:6376  66 F8     	ror	<_ax		; location)
+  225                     	lsrw <_ax
+       01:6378  46 F9     	lsr	<_ax+1		; value (at stated memory
+       01:637A  66 F8     	ror	<_ax		; location)
+  226                     	lsrw <_ax
+       01:637C  46 F9     	lsr	<_ax+1		; value (at stated memory
+       01:637E  66 F8     	ror	<_ax		; location)
+  227                     	andw <_ax,#$fffe
+       01:6380  A5 F8     	lda	LOW_BYTE <_ax
+       01:6382  29 FE     	and LOW_BYTE #$fffe
+       01:6384  85 F8     	sta LOW_BYTE <_ax
+       01:6386  A5 F9     	lda HIGH_BYTE <_ax
+       01:6388  29 FF     	and HIGH_BYTE #$fffe
+       01:638A  85 F9     	sta HIGH_BYTE <_ax
+  228                     	addw <_ax,<_si
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:638C  18        	clc
+       01:638D  A5 EE     	lda	LOW_BYTE <_si
+       01:638F  65 F8     	adc	LOW_BYTE <_ax
+       01:6391  85 EE     	sta	LOW_BYTE <_si
+       01:6393  A5 EF     	lda	HIGH_BYTE <_si
+       01:6395  65 F9     	adc	HIGH_BYTE <_ax
+       01:6397  85 EF     	sta	HIGH_BYTE <_si
+                          .endif
+  229                     	addw #map_load,<_si
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:6399  18        	clc
+       01:639A  A5 EE     	lda	LOW_BYTE <_si
+       01:639C  69 20     	adc	LOW_BYTE #map_load
+       01:639E  85 EE     	sta	LOW_BYTE <_si
+       01:63A0  A5 EF     	lda	HIGH_BYTE <_si
+       01:63A2  69 A0     	adc	HIGH_BYTE #map_load
+       01:63A4  85 EF     	sta	HIGH_BYTE <_si
+                          .endif
+  230                     	
+  231                     ;destination in vram is (((scroll_y & $1f0) << 3) + $780) + ((scroll_x & $1f0) >> 3)
+  232                     	stw <scroll_y,<_di
+       01:63A6  A5 02     	lda	LOW_BYTE <scroll_y
+       01:63A8  85 F0     	sta	LOW_BYTE <_di
+       01:63AA  A5 03     	lda	HIGH_BYTE <scroll_y
+       01:63AC  85 F1     	sta	HIGH_BYTE <_di
+  233                     	andw <_di,#$1f0
+       01:63AE  A5 F0     	lda	LOW_BYTE <_di
+       01:63B0  29 F0     	and LOW_BYTE #$1f0
+       01:63B2  85 F0     	sta LOW_BYTE <_di
+       01:63B4  A5 F1     	lda HIGH_BYTE <_di
+       01:63B6  29 01     	and HIGH_BYTE #$1f0
+       01:63B8  85 F1     	sta HIGH_BYTE <_di
+  234                     	aslw <_di
+       01:63BA  06 F0     	asl	<_di		; word-sized value (at stated
+       01:63BC  26 F1     	rol	<_di+1		; memory location)
+  235                     	aslw <_di
+       01:63BE  06 F0     	asl	<_di		; word-sized value (at stated
+       01:63C0  26 F1     	rol	<_di+1		; memory location)
+  236                     	aslw <_di
+       01:63C2  06 F0     	asl	<_di		; word-sized value (at stated
+       01:63C4  26 F1     	rol	<_di+1		; memory location)
+  237                     	addw #$780,<_di ;(NUM_ROWS + 1) * #$80
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:63C6  18        	clc
+       01:63C7  A5 F0     	lda	LOW_BYTE <_di
+       01:63C9  69 80     	adc	LOW_BYTE #$780
+       01:63CB  85 F0     	sta	LOW_BYTE <_di
+       01:63CD  A5 F1     	lda	HIGH_BYTE <_di
+       01:63CF  69 07     	adc	HIGH_BYTE #$780
+       01:63D1  85 F1     	sta	HIGH_BYTE <_di
+                          .endif
+  238                     	stw <scroll_x,<_ax
+       01:63D3  A5 00     	lda	LOW_BYTE <scroll_x
+       01:63D5  85 F8     	sta	LOW_BYTE <_ax
+       01:63D7  A5 01     	lda	HIGH_BYTE <scroll_x
+       01:63D9  85 F9     	sta	HIGH_BYTE <_ax
+  239                     	andw <_ax,#$1f0
+       01:63DB  A5 F8     	lda	LOW_BYTE <_ax
+       01:63DD  29 F0     	and LOW_BYTE #$1f0
+       01:63DF  85 F8     	sta LOW_BYTE <_ax
+       01:63E1  A5 F9     	lda HIGH_BYTE <_ax
+       01:63E3  29 01     	and HIGH_BYTE #$1f0
+       01:63E5  85 F9     	sta HIGH_BYTE <_ax
+  240                     	lsrw <_ax
+       01:63E7  46 F9     	lsr	<_ax+1		; value (at stated memory
+       01:63E9  66 F8     	ror	<_ax		; location)
+  241                     	lsrw <_ax
+       01:63EB  46 F9     	lsr	<_ax+1		; value (at stated memory
+       01:63ED  66 F8     	ror	<_ax		; location)
+  242                     	lsrw <_ax
+       01:63EF  46 F9     	lsr	<_ax+1		; value (at stated memory
+       01:63F1  66 F8     	ror	<_ax		; location)
+  243                     	addw <_ax,<_di
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:63F3  18        	clc
+       01:63F4  A5 F0     	lda	LOW_BYTE <_di
+       01:63F6  65 F8     	adc	LOW_BYTE <_ax
+       01:63F8  85 F0     	sta	LOW_BYTE <_di
+       01:63FA  A5 F1     	lda	HIGH_BYTE <_di
+       01:63FC  65 F9     	adc	HIGH_BYTE <_ax
+       01:63FE  85 F1     	sta	HIGH_BYTE <_di
+                          .endif
+  244                     	andw <_di,#$fff ;keep it in the tilemap range
+       01:6400  A5 F0     	lda	LOW_BYTE <_di
+       01:6402  29 FF     	and LOW_BYTE #$fff
+       01:6404  85 F0     	sta LOW_BYTE <_di
+       01:6406  A5 F1     	lda HIGH_BYTE <_di
+       01:6408  29 0F     	and HIGH_BYTE #$fff
+       01:640A  85 F1     	sta HIGH_BYTE <_di
+  245                     	;column number in cx
+  246                     	stw <_ax,<_cx
+       01:640C  A5 F8     	lda	LOW_BYTE <_ax
+       01:640E  85 FC     	sta	LOW_BYTE <_cx
+       01:6410  A5 F9     	lda	HIGH_BYTE <_ax
+       01:6412  85 FD     	sta	HIGH_BYTE <_cx
+  247                     	lsrw <_cx
+       01:6414  46 FD     	lsr	<_cx+1		; value (at stated memory
+       01:6416  66 FC     	ror	<_cx		; location)
+  248                     	;want to keep track of when we're on a 32 tile boundary
+  249  01:6418  A5 FC     	lda <_cl
+  250  01:641A  29 1F     	and #$1f
+  251  01:641C  85 FC     	sta <_cl
+  252                     	
+  253                     ;tile num = (num >> 3) * $20 + (num & 7) * 2
+  254                     ;         = ((num & $fff8) << 2) + ((num & 7) << 1)
+  255  01:641E  A2 10     	ldx #NUM_COLS
+  256  01:6420  C2        	cly
+  257  01:6421            .row_loop:
+  258  01:6421  B1 EE     	lda [<_si],y
+  259  01:6423  85 F8     	sta <_al ;_ax is the first "num"
+  260                     	;((num & 7) << 1)
+  261  01:6425  29 07     	and #$7
+  262  01:6427  0A        	asl a
+  263  01:6428  85 FA     	sta <_bl ;_bx is the second "num"
+  264                     
+  265  01:642A  C8        	iny
+  266  01:642B  B1 EE     	lda [<_si],y
+  267  01:642D  85 F9     	sta <_ah
+  268  01:642F  64 FB     	stz <_bh
+  269  01:6431  C8        	iny
+  270                     	;((num & #$fff8) << 2)
+  271                     	andw <_ax,#$fff8
+       01:6432  A5 F8     	lda	LOW_BYTE <_ax
+       01:6434  29 F8     	and LOW_BYTE #$fff8
+       01:6436  85 F8     	sta LOW_BYTE <_ax
+       01:6438  A5 F9     	lda HIGH_BYTE <_ax
+       01:643A  29 FF     	and HIGH_BYTE #$fff8
+       01:643C  85 F9     	sta HIGH_BYTE <_ax
+  272                     	aslw <_ax
+       01:643E  06 F8     	asl	<_ax		; word-sized value (at stated
+       01:6440  26 F9     	rol	<_ax+1		; memory location)
+  273                     	aslw <_ax
+       01:6442  06 F8     	asl	<_ax		; word-sized value (at stated
+       01:6444  26 F9     	rol	<_ax+1		; memory location)
+  274                     	addw <_ax,<_bx
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:6446  18        	clc
+       01:6447  A5 FA     	lda	LOW_BYTE <_bx
+       01:6449  65 F8     	adc	LOW_BYTE <_ax
+       01:644B  85 FA     	sta	LOW_BYTE <_bx
+       01:644D  A5 FB     	lda	HIGH_BYTE <_bx
+       01:644F  65 F9     	adc	HIGH_BYTE <_ax
+       01:6451  85 FB     	sta	HIGH_BYTE <_bx
+                          .endif
+  275                     	addw #$200,<_bx ;tile numbers start at $200
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:6453  18        	clc
+       01:6454  A5 FA     	lda	LOW_BYTE <_bx
+       01:6456  69 00     	adc	LOW_BYTE #$200
+       01:6458  85 FA     	sta	LOW_BYTE <_bx
+       01:645A  A5 FB     	lda	HIGH_BYTE <_bx
+       01:645C  69 02     	adc	HIGH_BYTE #$200
+       01:645E  85 FB     	sta	HIGH_BYTE <_bx
+                          .endif
+  276                     	;correct tile number for upper left corner of 16x16 tile now in _bx
+  277                     	vreg #VDC_MAWR
+       01:6460  A9 00     	lda	#VDC_MAWR
+       01:6462  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:6464  03 00     	st0	#VDC_MAWR
+                          .else
+                          .endif
+  278                     	stw <_di,video_data
+       01:6466  A5 F0     	lda	LOW_BYTE <_di
+       01:6468  8D 02 00  	sta	LOW_BYTE video_data
+       01:646B  A5 F1     	lda	HIGH_BYTE <_di
+       01:646D  8D 03 00  	sta	HIGH_BYTE video_data
+  279                     	vreg #VDC_VWR
+       01:6470  A9 02     	lda	#VDC_VWR
+       01:6472  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:6474  03 02     	st0	#VDC_VWR
+                          .else
+                          .endif
+  280                     	stw <_bx,video_data
+       01:6476  A5 FA     	lda	LOW_BYTE <_bx
+       01:6478  8D 02 00  	sta	LOW_BYTE video_data
+       01:647B  A5 FB     	lda	HIGH_BYTE <_bx
+       01:647D  8D 03 00  	sta	HIGH_BYTE video_data
+  281                     	;upper right corner
+  282                     	incw <_bx
+       01:6480  E6 FA     	inc	<_bx		; value at stated memory
+       01:6482  D0 02     	bne	.x_00118		; location
+       01:6484  E6 FB     	inc	<_bx+1
+       01:6486            .x_00118:
+  283                     	stw <_bx,video_data
+       01:6486  A5 FA     	lda	LOW_BYTE <_bx
+       01:6488  8D 02 00  	sta	LOW_BYTE video_data
+       01:648B  A5 FB     	lda	HIGH_BYTE <_bx
+       01:648D  8D 03 00  	sta	HIGH_BYTE video_data
+  284                     	;lower left corner
+  285                     	addw #$f,<_bx
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:6490  18        	clc
+       01:6491  A5 FA     	lda	LOW_BYTE <_bx
+       01:6493  69 0F     	adc	LOW_BYTE #$f
+       01:6495  85 FA     	sta	LOW_BYTE <_bx
+       01:6497  A5 FB     	lda	HIGH_BYTE <_bx
+       01:6499  69 00     	adc	HIGH_BYTE #$f
+       01:649B  85 FB     	sta	HIGH_BYTE <_bx
+                          .endif
+  286                     	;screen is on next row (64x64 tilemap)
+  287                     	addw #$40,<_di
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:649D  18        	clc
+       01:649E  A5 F0     	lda	LOW_BYTE <_di
+       01:64A0  69 40     	adc	LOW_BYTE #$40
+       01:64A2  85 F0     	sta	LOW_BYTE <_di
+       01:64A4  A5 F1     	lda	HIGH_BYTE <_di
+       01:64A6  69 00     	adc	HIGH_BYTE #$40
+       01:64A8  85 F1     	sta	HIGH_BYTE <_di
+                          .endif
+  288                     	vreg #VDC_MAWR
+       01:64AA  A9 00     	lda	#VDC_MAWR
+       01:64AC  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:64AE  03 00     	st0	#VDC_MAWR
+                          .else
+                          .endif
+  289                     	stw <_di,video_data
+       01:64B0  A5 F0     	lda	LOW_BYTE <_di
+       01:64B2  8D 02 00  	sta	LOW_BYTE video_data
+       01:64B5  A5 F1     	lda	HIGH_BYTE <_di
+       01:64B7  8D 03 00  	sta	HIGH_BYTE video_data
+  290                     	vreg #VDC_VWR
+       01:64BA  A9 02     	lda	#VDC_VWR
+       01:64BC  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:64BE  03 02     	st0	#VDC_VWR
+                          .else
+                          .endif
+  291                     	stw <_bx,video_data
+       01:64C0  A5 FA     	lda	LOW_BYTE <_bx
+       01:64C2  8D 02 00  	sta	LOW_BYTE video_data
+       01:64C5  A5 FB     	lda	HIGH_BYTE <_bx
+       01:64C7  8D 03 00  	sta	HIGH_BYTE video_data
+  292                     	;lower right corner
+  293                     	incw <_bx
+       01:64CA  E6 FA     	inc	<_bx		; value at stated memory
+       01:64CC  D0 02     	bne	.x_00126		; location
+       01:64CE  E6 FB     	inc	<_bx+1
+       01:64D0            .x_00126:
+  294                     	stw <_bx,video_data
+       01:64D0  A5 FA     	lda	LOW_BYTE <_bx
+       01:64D2  8D 02 00  	sta	LOW_BYTE video_data
+       01:64D5  A5 FB     	lda	HIGH_BYTE <_bx
+       01:64D7  8D 03 00  	sta	HIGH_BYTE video_data
+  295                     	;restore vram address to where it should be for the next tile
+  296  01:64DA  A5 FC     	lda <_cl
+  297  01:64DC  C9 1F     	cmp #$1f
+  298  01:64DE  D0 11     	bne .normal_subtract
+  299                     	subw #$7e,<_di ;subtract 1 extra row to compensate for the border
+       01:64E0  38        	sec
+       01:64E1  A5 F0     	lda	LOW_BYTE <_di
+       01:64E3  E9 7E     	sbc	LOW_BYTE #$7e
+       01:64E5  85 F0     	sta	LOW_BYTE <_di
+       01:64E7  A5 F1     	lda	HIGH_BYTE <_di
+       01:64E9  E9 00     	sbc	HIGH_BYTE #$7e
+       01:64EB  85 F1     	sta	HIGH_BYTE <_di
+  300  01:64ED  64 FC     	stz <_cl
+  301  01:64EF  80 0D     	bra .done_subtract
+  302  01:64F1            .normal_subtract:
+  303                     	subw #$3e,<_di ;each row is $40, so subtracting $3e is like
+       01:64F1  38        	sec
+       01:64F2  A5 F0     	lda	LOW_BYTE <_di
+       01:64F4  E9 3E     	sbc	LOW_BYTE #$3e
+       01:64F6  85 F0     	sta	LOW_BYTE <_di
+       01:64F8  A5 F1     	lda	HIGH_BYTE <_di
+       01:64FA  E9 00     	sbc	HIGH_BYTE #$3e
+       01:64FC  85 F1     	sta	HIGH_BYTE <_di
+  304  01:64FE            .done_subtract:
+  305                     	vreg #VDC_MAWR ;subtracting $40 and adding $2
+       01:64FE  A9 00     	lda	#VDC_MAWR
+       01:6500  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:6502  03 00     	st0	#VDC_MAWR
+                          .else
+                          .endif
+  306                     	stw <_di,video_data
+       01:6504  A5 F0     	lda	LOW_BYTE <_di
+       01:6506  8D 02 00  	sta	LOW_BYTE video_data
+       01:6509  A5 F1     	lda	HIGH_BYTE <_di
+       01:650B  8D 03 00  	sta	HIGH_BYTE video_data
+  307                     	vreg #VDC_VWR
+       01:650E  A9 02     	lda	#VDC_VWR
+       01:6510  85 F7     	sta	<vdc_reg
+                0001      .if (2 = ARG_IMMED)
+       01:6512  03 02     	st0	#VDC_VWR
+                          .else
+                          .endif
+  308  01:6514  E6 FC     	inc <_cl
+  309  01:6516  CA        	dex
+  310  01:6517  F0 03     	beq .done_row
+  311  01:6519  4C 21 64  	jmp .row_loop
+  312  01:651C            .done_row:
+  313  01:651C  60        	rts
+  314                     	
+  315                     	
+#[1]   main.asm
+   43                     
+   44                     	;asset location on cd-rom
+#[2]   cd_labels.asm
+   45                     	.include "cd_labels.asm"
+    1                     ;  CD-Rom Data/Overlay reference labels
+    2                     ;  Generated by pyDiscMaker Version 1.12
+    3                     ; (C) 2019 The DiscMaker Project
+    4                     
+    5           0000      _ADDR_ipl = 0
+    6           1000      _SIZE_ipl = 4096
+    7           0002      _SECSIZE_ipl = 2
+    8                     
+    9           0002      _ADDR_Main_Program = 2
+   10           4000      _SIZE_Main_Program = 16384
+   11           0008      _SECSIZE_Main_Program = 8
+   12                     
+   13           000A      _ADDR_level1 = 10
+   14           4000      _SIZE_level1 = 16384
+   15           0008      _SECSIZE_level1 = 8
+   16                     
+   17           0012      _ADDR__CDROM_Specs_Padding = 18
+   18           2000      _SIZE__CDROM_Specs_Padding = 270336
+   19           0084      _SECSIZE__CDROM_Specs_Padding = 132
+   20                     
+#[1]   main.asm
+   46                     
+   47                     	;-----asset load pointers-----
+   48           8000      tile_load equ $8000
+   49           A000      pal_load equ $a000 ;palette is 32 bytes
+   50           A020      map_load equ $a020
+   51                     
+   54           2000      	.zp
+   55                     	
+   56  --:2000            	scroll_x: .ds 2
+   57  --:2002            	scroll_y: .ds 2
+   58  --:2004            	status: .ds 1
+   59  --:2005            	frame: .ds 2
+   60  --:2007            	joypad: .ds 1
+   61  --:2008            	joyedge: .ds 1 ;1 when pad transitioned from 0 to 1
+   62                     
+   63           E000      	.data
+   64                     
+   65           651D      	.code
+   66           0000      	.bank   0
+   67           4070      	.org    $4070
+   68                     
+   69                     ;
+   70                     ;
+   71                     ;
+   72  00:4070            boot:
+   73  00:4070  20 99 E0  	jsr     ex_dspoff
+   74  00:4073  20 81 E0  	jsr     ex_rcroff
+   75  00:4076  20 87 E0  	jsr     ex_irqoff
+   76  00:4079  20 30 E0  	jsr     ad_reset
+   77                     
+   78  00:407C  20 90 41  	jsr     init_vce
+   79                     
+   80                     	stw     #boot_video_mode,_ax
+       00:407F  A9 C0     	lda	LOW_BYTE #boot_video_mode
        00:4081  8D F8 20  	sta	LOW_BYTE _ax
-       00:4084  A9 42     	lda	HIGH_BYTE #boot_video_mode
+       00:4084  A9 41     	lda	HIGH_BYTE #boot_video_mode
        00:4086  8D F9 20  	sta	HIGH_BYTE _ax
-   61  00:4089  20 8B 42  	jsr     init_vdc
-   62                     	
-   63                     	;set up vsync handler
-   64                     	stw #my_vsync,sync_jmp
-       00:408C  A9 73     	lda	LOW_BYTE #my_vsync
+   81  00:4089  20 75 41  	jsr     init_vdc
+   82                     	
+   83                     	;set up vsync handler
+   84                     	stw #my_vsync,sync_jmp
+       00:408C  A9 3D     	lda	LOW_BYTE #my_vsync
        00:408E  8D 08 22  	sta	LOW_BYTE sync_jmp
-       00:4091  A9 42     	lda	HIGH_BYTE #my_vsync
+       00:4091  A9 41     	lda	HIGH_BYTE #my_vsync
        00:4093  8D 09 22  	sta	HIGH_BYTE sync_jmp
-   65  00:4096  A9 30     	lda #%00110000
-   66  00:4098  8D F5 20  	sta irq_m
-   67  00:409B  20 96 E0  	jsr ex_dspon
-   68  00:409E  20 7E E0  	jsr ex_rcron
-   69  00:40A1  20 84 E0  	jsr ex_irqon
-   70  00:40A4  20 7B E0  	jsr ex_vsync
-   71  00:40A7  20 7B E0  	jsr ex_vsync
-   72                     	
-   73                     	;load level gfx & map
-   74                     	cd_load _ADDR_level1,#$82,#8
+   85  00:4096  A9 30     	lda #%00110000
+   86  00:4098  8D F5 20  	sta irq_m
+   87  00:409B  20 96 E0  	jsr ex_dspon
+   88  00:409E  20 7E E0  	jsr ex_rcron
+   89  00:40A1  20 84 E0  	jsr ex_irqon
+   90  00:40A4  20 7B E0  	jsr ex_vsync
+   91  00:40A7  20 7B E0  	jsr ex_vsync
+   92                     	
+   93                     	;load level gfx & map
+   94                     	cd_load _ADDR_level1,#$82,#8
        00:40AA  64 FC     	stz <_cl ;sector number (bits 24-16)
        00:40AC  A9 00     	lda #HIGH(_ADDR_level1) ;sector number (bits 15-8)
        00:40AE  85 FD     	sta <_ch
@@ -60,532 +1117,311 @@
        00:40BC  A9 08     	lda #8 ;write n sectors
        00:40BE  85 F8     	sta <_al
        00:40C0  20 00 60  	jsr cd_saferead
-   75                     	
-   76                     	;play cdda
-   77                     	; lda #2 ;track 2
-   78                     	; jsr cd_track
-   79                     	
-   80                     	;copy bg palette
-   81                     	stw     #pal_load,<_ax
+   95                     	
+   96                     	;play cdda
+   97                     	; lda #2 ;track 2
+   98                     	; jsr cd_track
+   99                     	
+  100                     	;copy bg palette
+  101                     	stw     #pal_load,<_ax
        00:40C3  A9 00     	lda	LOW_BYTE #pal_load
        00:40C5  85 F8     	sta	LOW_BYTE <_ax
        00:40C7  A9 A0     	lda	HIGH_BYTE #pal_load
        00:40C9  85 F9     	sta	HIGH_BYTE <_ax
-   82                     	stw     #$0000,VCE_ADDR_LO
+  102                     	stw     #$0000,VCE_ADDR_LO
        00:40CB  A9 00     	lda	LOW_BYTE #$0000
        00:40CD  8D 02 04  	sta	LOW_BYTE VCE_ADDR_LO
        00:40D0  A9 00     	lda	HIGH_BYTE #$0000
        00:40D2  8D 03 04  	sta	HIGH_BYTE VCE_ADDR_LO
-   83  00:40D5  20 C4 42  	jsr     copy_palette
-   84                     
-   85                     	;copy bg data
-   86                     	vreg #VDC_MAWR
+  103  00:40D5  20 AE 41  	jsr     copy_palette
+  104                     	
+  105                     	;copy bg tiles
+  106                     	vreg #VDC_MAWR
        00:40D8  A9 00     	lda	#VDC_MAWR
        00:40DA  85 F7     	sta	<vdc_reg
                 0001      .if (2 = ARG_IMMED)
        00:40DC  03 00     	st0	#VDC_MAWR
                           .else
                           .endif
-   87                     	stw #$2000,video_data
+  107                     	stw #$2000,video_data
        00:40DE  A9 00     	lda	LOW_BYTE #$2000
        00:40E0  8D 02 00  	sta	LOW_BYTE video_data
        00:40E3  A9 20     	lda	HIGH_BYTE #$2000
        00:40E5  8D 03 00  	sta	HIGH_BYTE video_data
-   88                     	vreg #VDC_VWR
+  108                     	vreg #VDC_VWR
        00:40E8  A9 02     	lda	#VDC_VWR
        00:40EA  85 F7     	sta	<vdc_reg
                 0001      .if (2 = ARG_IMMED)
        00:40EC  03 02     	st0	#VDC_VWR
                           .else
                           .endif
-   89  00:40EE  E3 00 80  	tia tile_load,video_data,$2000
+  109  00:40EE  E3 00 80  	tia tile_load,video_data,$2000
        00:40F1  02 00 00  
        00:40F4  20        
-   90                     
-   91                     	;tilemap uses 16x16 tiles, so make it 8x8 like the vdc expects
-   92                     	stwz <_di ;pointer to video start address
-       00:40F5  64 F0     	stz	LOW_BYTE <_di
-       00:40F7  64 F1     	stz	HIGH_BYTE <_di
-   93                     	stw #map_load,<_si
-       00:40F9  A9 20     	lda	LOW_BYTE #map_load
-       00:40FB  85 EE     	sta	LOW_BYTE <_si
-       00:40FD  A9 A0     	lda	HIGH_BYTE #map_load
-       00:40FF  85 EF     	sta	HIGH_BYTE <_si
-   94  00:4101  A9 20     	lda #32 ;32 columns
-   95  00:4103  85 FE     	sta <_dl
-   96  00:4105            .col_loop:
-   97                     ;tile num = (num >> 3) * $20 + (num & 7) * 2
-   98                     ;         = ((num & $fff8) << 2) + ((num & 7) << 1)
-   99  00:4105  A2 20     	ldx #32 ;32 rows
-  100  00:4107  C2        	cly
-  101  00:4108            .row_loop:
-  102  00:4108  B1 EE     	lda [<_si],y
-  103  00:410A  85 F8     	sta <_al
-  104                     	;((num & 7) << 1)
-  105  00:410C  29 07     	and #$7
-  106  00:410E  0A        	asl a
-  107  00:410F  85 FA     	sta <_bl
-  108                     
-  109  00:4111  C8        	iny
-  110  00:4112  B1 EE     	lda [<_si],y
-  111  00:4114  85 F9     	sta <_ah
-  112  00:4116  64 FB     	stz <_bh
-  113  00:4118  C8        	iny
-  114                     	;((num & #$fff8) << 2)
-  115                     	andw <_ax,#$fff8
-       00:4119  A5 F8     	lda	LOW_BYTE <_ax
-       00:411B  29 F8     	and LOW_BYTE #$fff8
-       00:411D  85 F8     	sta LOW_BYTE <_ax
-       00:411F  A5 F9     	lda HIGH_BYTE <_ax
-       00:4121  29 FF     	and HIGH_BYTE #$fff8
-       00:4123  85 F9     	sta HIGH_BYTE <_ax
-  116                     	aslw <_ax
-       00:4125  06 F8     	asl	<_ax		; word-sized value (at stated
-       00:4127  26 F9     	rol	<_ax+1		; memory location)
-  117                     	aslw <_ax
-       00:4129  06 F8     	asl	<_ax		; word-sized value (at stated
-       00:412B  26 F9     	rol	<_ax+1		; memory location)
-  118                     	addw <_ax,<_bx
-                0000      .if	(2 = 3)
-                          .else
-                          	; 2-arg mode
-                          	;
-       00:412D  18        	clc
-       00:412E  A5 FA     	lda	LOW_BYTE <_bx
-       00:4130  65 F8     	adc	LOW_BYTE <_ax
-       00:4132  85 FA     	sta	LOW_BYTE <_bx
-       00:4134  A5 FB     	lda	HIGH_BYTE <_bx
-       00:4136  65 F9     	adc	HIGH_BYTE <_ax
-       00:4138  85 FB     	sta	HIGH_BYTE <_bx
-                          .endif
-  119                     	addw #$200,<_bx ;tile numbers start at $200
-                0000      .if	(2 = 3)
-                          .else
-                          	; 2-arg mode
-                          	;
-       00:413A  18        	clc
-       00:413B  A5 FA     	lda	LOW_BYTE <_bx
-       00:413D  69 00     	adc	LOW_BYTE #$200
-       00:413F  85 FA     	sta	LOW_BYTE <_bx
-       00:4141  A5 FB     	lda	HIGH_BYTE <_bx
-       00:4143  69 02     	adc	HIGH_BYTE #$200
-       00:4145  85 FB     	sta	HIGH_BYTE <_bx
-                          .endif
-  120                     	;correct tile number for upper left corner of 16x16 tile now in _bx
-  121                     	vreg #VDC_MAWR
-       00:4147  A9 00     	lda	#VDC_MAWR
-       00:4149  85 F7     	sta	<vdc_reg
+  110                     	; ;copy bg data
+  111                     	; ldx #18
+  112                     	; ldy #18
+  113                     	; jsr scroll_fill
+  114                     	
+  115                     	;init scroll
+  116                     	; stw #(28*16),<scroll_x
+  117                     	; stw #(19*16),<scroll_y
+  118                     	stwz <scroll_x
+       00:40F5  64 00     	stz	LOW_BYTE <scroll_x
+       00:40F7  64 01     	stz	HIGH_BYTE <scroll_x
+  119                     	stwz <scroll_y
+       00:40F9  64 02     	stz	LOW_BYTE <scroll_y
+       00:40FB  64 03     	stz	HIGH_BYTE <scroll_y
+  120                     	
+  121                     	;main loop
+  122  00:40FD            main:
+  123                     	;d-pad up
+  124  00:40FD  4F 07 0D  	bbr4 <joypad,.no_up
+  125                     	decw <scroll_y
+       00:4100  38        	sec			; value at stated memory
+       00:4101  A5 02     	lda	<scroll_y		; location
+       00:4103  E9 01     	sbc	#1
+       00:4105  85 02     	sta	<scroll_y
+       00:4107  A5 03     	lda	<scroll_y+1
+       00:4109  E9 00     	sbc	#0
+       00:410B  85 03     	sta	<scroll_y+1
+  126  00:410D            .no_up:
+  127                     	;d-pad right
+  128  00:410D  5F 07 06  	bbr5 <joypad,.no_right
+  129                     	incw <scroll_x
+       00:4110  E6 00     	inc	<scroll_x		; value at stated memory
+       00:4112  D0 02     	bne	.x_00144		; location
+       00:4114  E6 01     	inc	<scroll_x+1
+       00:4116            .x_00144:
+  130  00:4116            .no_right:
+  131                     	;d-pad down
+  132  00:4116  6F 07 06  	bbr6 <joypad,.no_down
+  133                     	incw <scroll_y
+       00:4119  E6 02     	inc	<scroll_y		; value at stated memory
+       00:411B  D0 02     	bne	.x_00145		; location
+       00:411D  E6 03     	inc	<scroll_y+1
+       00:411F            .x_00145:
+  134  00:411F            .no_down:
+  135                     	;d-pad left
+  136  00:411F  7F 07 0D  	bbr7 <joypad,.no_left
+  137                     	decw <scroll_x
+       00:4122  38        	sec			; value at stated memory
+       00:4123  A5 00     	lda	<scroll_x		; location
+       00:4125  E9 01     	sbc	#1
+       00:4127  85 00     	sta	<scroll_x
+       00:4129  A5 01     	lda	<scroll_x+1
+       00:412B  E9 00     	sbc	#0
+       00:412D  85 01     	sta	<scroll_x+1
+  138  00:412F            .no_left:
+  139                     
+  140  00:412F  20 3F 63  	jsr scroll_downrow
+  141                     	
+  142  00:4132  A9 01     	lda #1
+  143  00:4134  85 04     	sta <status
+  144  00:4136            end_loop:
+  145                     ;loop until vsync function sets status to 0
+  146  00:4136  A5 04     	lda <status
+  147  00:4138  D0 FC     	bne end_loop
+  148  00:413A  4C FD 40  	jmp main
+  149                     	
+  150  00:413D            my_vsync:	
+  151                     	incw <frame
+       00:413D  E6 05     	inc	<frame		; value at stated memory
+       00:413F  D0 02     	bne	.x_00147		; location
+       00:4141  E6 06     	inc	<frame+1
+       00:4143            .x_00147:
+  152  00:4143  64 04     	stz <status
+  153                     
+  154                     	;set scroll pos
+  155                     	vreg #VDC_BXR
+       00:4145  A9 07     	lda	#VDC_BXR
+       00:4147  85 F7     	sta	<vdc_reg
                 0001      .if (2 = ARG_IMMED)
-       00:414B  03 00     	st0	#VDC_MAWR
+       00:4149  03 07     	st0	#VDC_BXR
                           .else
                           .endif
-  122                     	stw <_di,video_data
-       00:414D  A5 F0     	lda	LOW_BYTE <_di
-       00:414F  8D 02 00  	sta	LOW_BYTE video_data
-       00:4152  A5 F1     	lda	HIGH_BYTE <_di
-       00:4154  8D 03 00  	sta	HIGH_BYTE video_data
-  123                     	vreg #VDC_VWR
-       00:4157  A9 02     	lda	#VDC_VWR
-       00:4159  85 F7     	sta	<vdc_reg
+  156                     	stw <scroll_x,video_data
+       00:414B  A5 00     	lda	LOW_BYTE <scroll_x
+       00:414D  8D 02 00  	sta	LOW_BYTE video_data
+       00:4150  A5 01     	lda	HIGH_BYTE <scroll_x
+       00:4152  8D 03 00  	sta	HIGH_BYTE video_data
+  157                     	vreg #VDC_BYR
+       00:4155  A9 08     	lda	#VDC_BYR
+       00:4157  85 F7     	sta	<vdc_reg
                 0001      .if (2 = ARG_IMMED)
-       00:415B  03 02     	st0	#VDC_VWR
+       00:4159  03 08     	st0	#VDC_BYR
                           .else
                           .endif
-  124                     	stw <_bx,video_data
-       00:415D  A5 FA     	lda	LOW_BYTE <_bx
-       00:415F  8D 02 00  	sta	LOW_BYTE video_data
-       00:4162  A5 FB     	lda	HIGH_BYTE <_bx
-       00:4164  8D 03 00  	sta	HIGH_BYTE video_data
-  125                     	;upper right corner
-  126                     	incw <_bx
-       00:4167  E6 FA     	inc	<_bx		; value at stated memory
-       00:4169  D0 02     	bne	.x_00020		; location
-       00:416B  E6 FB     	inc	<_bx+1
-       00:416D            .x_00020:
-  127                     	stw <_bx,video_data
-       00:416D  A5 FA     	lda	LOW_BYTE <_bx
-       00:416F  8D 02 00  	sta	LOW_BYTE video_data
-       00:4172  A5 FB     	lda	HIGH_BYTE <_bx
-       00:4174  8D 03 00  	sta	HIGH_BYTE video_data
-  128                     	;lower left corner
-  129                     	addw #$f,<_bx
-                0000      .if	(2 = 3)
-                          .else
-                          	; 2-arg mode
-                          	;
-       00:4177  18        	clc
-       00:4178  A5 FA     	lda	LOW_BYTE <_bx
-       00:417A  69 0F     	adc	LOW_BYTE #$f
-       00:417C  85 FA     	sta	LOW_BYTE <_bx
-       00:417E  A5 FB     	lda	HIGH_BYTE <_bx
-       00:4180  69 00     	adc	HIGH_BYTE #$f
-       00:4182  85 FB     	sta	HIGH_BYTE <_bx
-                          .endif
-  130                     	;screen is on next row (64x64 tilemap)
-  131                     	addw #$40,<_di
-                0000      .if	(2 = 3)
-                          .else
-                          	; 2-arg mode
-                          	;
-       00:4184  18        	clc
-       00:4185  A5 F0     	lda	LOW_BYTE <_di
-       00:4187  69 40     	adc	LOW_BYTE #$40
-       00:4189  85 F0     	sta	LOW_BYTE <_di
-       00:418B  A5 F1     	lda	HIGH_BYTE <_di
-       00:418D  69 00     	adc	HIGH_BYTE #$40
-       00:418F  85 F1     	sta	HIGH_BYTE <_di
-                          .endif
-  132                     	vreg #VDC_MAWR
-       00:4191  A9 00     	lda	#VDC_MAWR
-       00:4193  85 F7     	sta	<vdc_reg
-                0001      .if (2 = ARG_IMMED)
-       00:4195  03 00     	st0	#VDC_MAWR
-                          .else
-                          .endif
-  133                     	stw <_di,video_data
-       00:4197  A5 F0     	lda	LOW_BYTE <_di
-       00:4199  8D 02 00  	sta	LOW_BYTE video_data
-       00:419C  A5 F1     	lda	HIGH_BYTE <_di
-       00:419E  8D 03 00  	sta	HIGH_BYTE video_data
-  134                     	vreg #VDC_VWR
-       00:41A1  A9 02     	lda	#VDC_VWR
-       00:41A3  85 F7     	sta	<vdc_reg
-                0001      .if (2 = ARG_IMMED)
-       00:41A5  03 02     	st0	#VDC_VWR
-                          .else
-                          .endif
-  135                     	stw <_bx,video_data
-       00:41A7  A5 FA     	lda	LOW_BYTE <_bx
-       00:41A9  8D 02 00  	sta	LOW_BYTE video_data
-       00:41AC  A5 FB     	lda	HIGH_BYTE <_bx
-       00:41AE  8D 03 00  	sta	HIGH_BYTE video_data
-  136                     	;lower right corner
-  137                     	incw <_bx
-       00:41B1  E6 FA     	inc	<_bx		; value at stated memory
-       00:41B3  D0 02     	bne	.x_00028		; location
-       00:41B5  E6 FB     	inc	<_bx+1
-       00:41B7            .x_00028:
-  138                     	stw <_bx,video_data
-       00:41B7  A5 FA     	lda	LOW_BYTE <_bx
-       00:41B9  8D 02 00  	sta	LOW_BYTE video_data
-       00:41BC  A5 FB     	lda	HIGH_BYTE <_bx
-       00:41BE  8D 03 00  	sta	HIGH_BYTE video_data
-  139                     	;restore vram address to where it should be for the next tile
-  140                     	subw #$3e,<_di ;each row is $40, so subtracting $3e is like
-       00:41C1  38        	sec
-       00:41C2  A5 F0     	lda	LOW_BYTE <_di
-       00:41C4  E9 3E     	sbc	LOW_BYTE #$3e
-       00:41C6  85 F0     	sta	LOW_BYTE <_di
-       00:41C8  A5 F1     	lda	HIGH_BYTE <_di
-       00:41CA  E9 00     	sbc	HIGH_BYTE #$3e
-       00:41CC  85 F1     	sta	HIGH_BYTE <_di
-  141                     	vreg #VDC_MAWR ;subtracting $40 and adding $2
-       00:41CE  A9 00     	lda	#VDC_MAWR
-       00:41D0  85 F7     	sta	<vdc_reg
-                0001      .if (2 = ARG_IMMED)
-       00:41D2  03 00     	st0	#VDC_MAWR
-                          .else
-                          .endif
-  142                     	stw <_di,video_data
-       00:41D4  A5 F0     	lda	LOW_BYTE <_di
-       00:41D6  8D 02 00  	sta	LOW_BYTE video_data
-       00:41D9  A5 F1     	lda	HIGH_BYTE <_di
-       00:41DB  8D 03 00  	sta	HIGH_BYTE video_data
-  143                     	vreg #VDC_VWR
-       00:41DE  A9 02     	lda	#VDC_VWR
-       00:41E0  85 F7     	sta	<vdc_reg
-                0001      .if (2 = ARG_IMMED)
-       00:41E2  03 02     	st0	#VDC_VWR
-                          .else
-                          .endif
-  144  00:41E4  CA        	dex
-  145  00:41E5  F0 03     	beq .done_row
-  146  00:41E7  4C 08 41  	jmp .row_loop
-  147  00:41EA            .done_row:
-  148  00:41EA  A5 FE     	lda <_dl
-  149  00:41EC  3A        	dec a
-  150  00:41ED  F0 1F     	beq .done
-  151  00:41EF  85 FE     	sta <_dl
-  152                     	addw #$80,<_si ;map is 64x32, each tile index is 2 bytes
-                0000      .if	(2 = 3)
-                          .else
-                          	; 2-arg mode
-                          	;
-       00:41F1  18        	clc
-       00:41F2  A5 EE     	lda	LOW_BYTE <_si
-       00:41F4  69 80     	adc	LOW_BYTE #$80
-       00:41F6  85 EE     	sta	LOW_BYTE <_si
-       00:41F8  A5 EF     	lda	HIGH_BYTE <_si
-       00:41FA  69 00     	adc	HIGH_BYTE #$80
-       00:41FC  85 EF     	sta	HIGH_BYTE <_si
-                          .endif
-  153                     	addw #$40,<_di ;skip every other row of the tilemap
-                0000      .if	(2 = 3)
-                          .else
-                          	; 2-arg mode
-                          	;
-       00:41FE  18        	clc
-       00:41FF  A5 F0     	lda	LOW_BYTE <_di
-       00:4201  69 40     	adc	LOW_BYTE #$40
-       00:4203  85 F0     	sta	LOW_BYTE <_di
-       00:4205  A5 F1     	lda	HIGH_BYTE <_di
-       00:4207  69 00     	adc	HIGH_BYTE #$40
-       00:4209  85 F1     	sta	HIGH_BYTE <_di
-                          .endif
-  154  00:420B  4C 05 41  	jmp .col_loop
-  155  00:420E            .done:
-  156                     	
-  157                     	;init scroll
-  158                     	stwz <scroll_x
-       00:420E  64 00     	stz	LOW_BYTE <scroll_x
-       00:4210  64 01     	stz	HIGH_BYTE <scroll_x
-  159                     	stwz <scroll_y
-       00:4212  64 02     	stz	LOW_BYTE <scroll_y
-       00:4214  64 03     	stz	HIGH_BYTE <scroll_y
-  160                     	;main loop
-  161  00:4216            main:
-  162  00:4216  4F 07 06  	bbr4 <joypad,.no_up
-  163                     	incw <scroll_y
-       00:4219  E6 02     	inc	<scroll_y		; value at stated memory
-       00:421B  D0 02     	bne	.x_00038		; location
-       00:421D  E6 03     	inc	<scroll_y+1
-       00:421F            .x_00038:
-  164  00:421F            .no_up:
-  165  00:421F  5F 07 0D  	bbr5 <joypad,.no_right
-  166                     	decw <scroll_x
-       00:4222  38        	sec			; value at stated memory
-       00:4223  A5 00     	lda	<scroll_x		; location
-       00:4225  E9 01     	sbc	#1
-       00:4227  85 00     	sta	<scroll_x
-       00:4229  A5 01     	lda	<scroll_x+1
-       00:422B  E9 00     	sbc	#0
-       00:422D  85 01     	sta	<scroll_x+1
-  167  00:422F            .no_right:
-  168  00:422F  6F 07 0D  	bbr6 <joypad,.no_down
-  169                     	decw <scroll_y
-       00:4232  38        	sec			; value at stated memory
-       00:4233  A5 02     	lda	<scroll_y		; location
-       00:4235  E9 01     	sbc	#1
-       00:4237  85 02     	sta	<scroll_y
-       00:4239  A5 03     	lda	<scroll_y+1
-       00:423B  E9 00     	sbc	#0
-       00:423D  85 03     	sta	<scroll_y+1
-  170  00:423F            .no_down:
-  171  00:423F  7F 07 06  	bbr7 <joypad,.no_left
-  172                     	incw <scroll_x
-       00:4242  E6 00     	inc	<scroll_x		; value at stated memory
-       00:4244  D0 02     	bne	.x_00041		; location
-       00:4246  E6 01     	inc	<scroll_x+1
-       00:4248            .x_00041:
-  173  00:4248            .no_left:
-  174                     
-  175                     
-  176                     	vreg #VDC_BXR
-       00:4248  A9 07     	lda	#VDC_BXR
-       00:424A  85 F7     	sta	<vdc_reg
-                0001      .if (2 = ARG_IMMED)
-       00:424C  03 07     	st0	#VDC_BXR
-                          .else
-                          .endif
-  177                     	stw <scroll_x,video_data
-       00:424E  A5 00     	lda	LOW_BYTE <scroll_x
-       00:4250  8D 02 00  	sta	LOW_BYTE video_data
-       00:4253  A5 01     	lda	HIGH_BYTE <scroll_x
-       00:4255  8D 03 00  	sta	HIGH_BYTE video_data
-  178                     	vreg #VDC_BYR
-       00:4258  A9 08     	lda	#VDC_BYR
-       00:425A  85 F7     	sta	<vdc_reg
-                0001      .if (2 = ARG_IMMED)
-       00:425C  03 08     	st0	#VDC_BYR
-                          .else
-                          .endif
-  179                     	stw <scroll_y,video_data
-       00:425E  A5 02     	lda	LOW_BYTE <scroll_y
-       00:4260  8D 02 00  	sta	LOW_BYTE video_data
-       00:4263  A5 03     	lda	HIGH_BYTE <scroll_y
-       00:4265  8D 03 00  	sta	HIGH_BYTE video_data
-  180                     	
-  181                     	; jsr ex_vsync
-  182  00:4268  A9 01     	lda #1
-  183  00:426A  85 04     	sta <status
-  184  00:426C            end_loop:
-  185                     ;loop until vsync function sets status to 0
-  186  00:426C  A5 04     	lda <status
-  187  00:426E  D0 FC     	bne end_loop
-  188  00:4270  4C 16 42  	jmp main
-  189                     	
-  190  00:4273            my_vsync:	
-  191                     	incw <frame
-       00:4273  E6 05     	inc	<frame		; value at stated memory
-       00:4275  D0 02     	bne	.x_00046		; location
-       00:4277  E6 06     	inc	<frame+1
-       00:4279            .x_00046:
-  192  00:4279  64 04     	stz <status
-  193                     	
-  194  00:427B  A9 01     	lda #1 ;read joypad 1
-  195  00:427D  20 63 E0  	jsr ex_joysns
-  196  00:4280  AD 28 22  	lda joy
-  197  00:4283  85 07     	sta <joypad
-  198  00:4285  AD 2D 22  	lda joytrg
-  199  00:4288  85 08     	sta <joyedge
-  200  00:428A  60        	rts
-  201                     	
-  202                     ; ***************************************************************************
-  203                     ; ***************************************************************************
-  204                     ;
-  205                     ;
-  206                     
-  207                     
-  208  00:428B            init_vdc:
-  209  00:428B  08        	php
-  210  00:428C  78        	sei
-  211  00:428D  C2        	cly
-  212  00:428E            .loop:
-  213  00:428E  B1 F8     	lda     [_ax],y
-  214  00:4290  F0 12     	beq     .done
-  215  00:4292  8D 00 00  	sta     VDC_CTRL
-  216  00:4295  C8        	iny
-  217  00:4296  B1 F8     	lda     [_ax],y
-  218  00:4298  8D 02 00  	sta     VDC_DATA_LO
-  219  00:429B  C8        	iny
-  220  00:429C  B1 F8     	lda     [_ax],y
-  221  00:429E  8D 03 00  	sta     VDC_DATA_HI
-  222  00:42A1  C8        	iny
-  223  00:42A2  80 EA     	bra     .loop
-  224  00:42A4            .done:
-  225  00:42A4  28        	plp
-  226  00:42A5  60        	rts
-  227                     
-  228                     
-  229                     ; ***************************************************************************
-  230                     ; ***************************************************************************
-  231                     ;
-  232                     ;
-  233                     
-  234  00:42A6            init_vce:
-  235  00:42A6  08        	php
-  236  00:42A7  78        	sei
-  237  00:42A8  9C 02 04  	stz     VCE_ADDR_LO
-  238  00:42AB  9C 03 04  	stz     VCE_ADDR_HI
-  239  00:42AE  A0 02     	ldy     #$02
-  240  00:42B0  82        	clx
-  241  00:42B1            .loop:
-  242  00:42B1  9C 04 04  	stz     VCE_DATA_LO
-  243  00:42B4  9C 05 04  	stz     VCE_DATA_HI
-  244  00:42B7  CA        	dex
-  245  00:42B8  D0 F7     	bne     .loop
-  246  00:42BA  88        	dey
-  247  00:42BB  D0 F4     	bne     .loop
-  248  00:42BD  A9 00     	lda     #VCE_CR_5MHz
-  249  00:42BF  8D 00 04  	sta     VCE_CTRL
-  250  00:42C2  28        	plp
-  251  00:42C3  60        	rts
-  252                     
+  158                     	stw <scroll_y,video_data
+       00:415B  A5 02     	lda	LOW_BYTE <scroll_y
+       00:415D  8D 02 00  	sta	LOW_BYTE video_data
+       00:4160  A5 03     	lda	HIGH_BYTE <scroll_y
+       00:4162  8D 03 00  	sta	HIGH_BYTE video_data
+  159                     	
+  160  00:4165  A9 01     	lda #1 ;read joypad 1
+  161  00:4167  20 63 E0  	jsr ex_joysns
+  162  00:416A  AD 28 22  	lda joy
+  163  00:416D  85 07     	sta <joypad
+  164  00:416F  AD 2D 22  	lda joytrg
+  165  00:4172  85 08     	sta <joyedge
+  166  00:4174  60        	rts
+  167                     	
+  168                     ; ***************************************************************************
+  169                     ; ***************************************************************************
+  170                     ;
+  171                     ;
+  172                     
+  173                     
+  174  00:4175            init_vdc:
+  175  00:4175  08        	php
+  176  00:4176  78        	sei
+  177  00:4177  C2        	cly
+  178  00:4178            .loop:
+  179  00:4178  B1 F8     	lda     [_ax],y
+  180  00:417A  F0 12     	beq     .done
+  181  00:417C  8D 00 00  	sta     VDC_CTRL
+  182  00:417F  C8        	iny
+  183  00:4180  B1 F8     	lda     [_ax],y
+  184  00:4182  8D 02 00  	sta     VDC_DATA_LO
+  185  00:4185  C8        	iny
+  186  00:4186  B1 F8     	lda     [_ax],y
+  187  00:4188  8D 03 00  	sta     VDC_DATA_HI
+  188  00:418B  C8        	iny
+  189  00:418C  80 EA     	bra     .loop
+  190  00:418E            .done:
+  191  00:418E  28        	plp
+  192  00:418F  60        	rts
+  193                     
+  194                     
+  195                     ; ***************************************************************************
+  196                     ; ***************************************************************************
+  197                     ;
+  198                     ;
+  199                     
+  200  00:4190            init_vce:
+  201  00:4190  08        	php
+  202  00:4191  78        	sei
+  203  00:4192  9C 02 04  	stz     VCE_ADDR_LO
+  204  00:4195  9C 03 04  	stz     VCE_ADDR_HI
+  205  00:4198  A0 02     	ldy     #$02
+  206  00:419A  82        	clx
+  207  00:419B            .loop:
+  208  00:419B  9C 04 04  	stz     VCE_DATA_LO
+  209  00:419E  9C 05 04  	stz     VCE_DATA_HI
+  210  00:41A1  CA        	dex
+  211  00:41A2  D0 F7     	bne     .loop
+  212  00:41A4  88        	dey
+  213  00:41A5  D0 F4     	bne     .loop
+  214  00:41A7  A9 00     	lda     #VCE_CR_5MHz
+  215  00:41A9  8D 00 04  	sta     VCE_CTRL
+  216  00:41AC  28        	plp
+  217  00:41AD  60        	rts
+  218                     
+  219                     
+  220                     ; ***************************************************************************
+  221                     ; ***************************************************************************
+  222                     ;
+  223                     ;
+  224                     
+  225  00:41AE            copy_palette:   
+  226  00:41AE  C2        	cly
+  227  00:41AF            .loop:
+  228  00:41AF  B1 F8     	lda     [_ax],y
+  229  00:41B1  C8        	iny
+  230  00:41B2  8D 04 04  	sta     VCE_DATA_LO
+  231  00:41B5  B1 F8     	lda     [_ax],y
+  232  00:41B7  C8        	iny
+  233  00:41B8  8D 05 04  	sta     VCE_DATA_HI
+  234  00:41BB  C0 20     	cpy     #32
+  235  00:41BD  D0 F0     	bne     .loop
+  236  00:41BF  60        	rts
+  237                     
+  238                     
+  239                     ; ***************************************************************************
+  240                     ; ***************************************************************************
+  241                     
+  242                     ; VDC constants for 240 & 256 wide display.
+  243                     
+  244           0000      VCE_CR_5MHz  = $00
+  245                     
+  246           0302      VDC_HSR_240  = $0302
+  247           041D      VDC_HDR_240  = $041D
+  248                     
+  249           0202      VDC_HSR_256  = $0202
+  250           041F      VDC_HDR_256  = $041F
+  251                     
+  252                     ; VDC constants for 320 & 336 wide display.
   253                     
-  254                     ; ***************************************************************************
-  255                     ; ***************************************************************************
-  256                     ;
-  257                     ;
+  254           0001      VCE_CR_7MHz  = $01
+  255                     
+  256           0502      VDC_HSR_320  = $0502
+  257           0427      VDC_HDR_320  = $0427
   258                     
-  259  00:42C4            copy_palette:   
-  260  00:42C4  C2        	cly
-  261  00:42C5            .loop:
-  262  00:42C5  B1 F8     	lda     [_ax],y
-  263  00:42C7  C8        	iny
-  264  00:42C8  8D 04 04  	sta     VCE_DATA_LO
-  265  00:42CB  B1 F8     	lda     [_ax],y
-  266  00:42CD  C8        	iny
-  267  00:42CE  8D 05 04  	sta     VCE_DATA_HI
-  268  00:42D1  C0 20     	cpy     #32
-  269  00:42D3  D0 F0     	bne     .loop
-  270  00:42D5  60        	rts
+  259           0402      VDC_HSR_336  = $0402
+  260           0429      VDC_HDR_336  = $0429
+  261                     
+  262                     ; VDC constants for 480 & 512 wide display.
+  263                     
+  264           0002      VCE_CR_10MHz = $02
+  265                     
+  266           0C02      VDC_HSR_480  = $0C02
+  267           043C      VDC_HDR_480  = $043C
+  268                     
+  269           0B02      VDC_HSR_512  = $0B02
+  270           043F      VDC_HDR_512  = $043F
   271                     
-  272                     
-  273                     ; ***************************************************************************
-  274                     ; ***************************************************************************
-  275                     
-  276                     ; VDC constants for 240 & 256 wide display.
+  272                     ; VDC constants for 200, 224 & 240 high display.
+  273                     
+  274           2302      VDC_VPR_200  = $2302
+  275           00C7      VDC_VDW_200  = $00C7
+  276           0018      VDC_VCR_200  = $0018
   277                     
-  278           0000      VCE_CR_5MHz  = $00
-  279                     
-  280           0302      VDC_HSR_240  = $0302
-  281           041D      VDC_HDR_240  = $041D
-  282                     
-  283           0202      VDC_HSR_256  = $0202
-  284           041F      VDC_HDR_256  = $041F
+  278           1702      VDC_VPR_224  = $1702
+  279           00DF      VDC_VDW_224  = $00DF
+  280           000C      VDC_VCR_224  = $000C
+  281                     
+  282           0F02      VDC_VPR_240  = $0F02
+  283           00EF      VDC_VDW_240  = $00EF
+  284           0004      VDC_VCR_240  = $0004 ; $00F6
   285                     
-  286                     ; VDC constants for 320 & 336 wide display.
+  286                     ; VDC constants for different BAT screen sizes.
   287                     
-  288           0001      VCE_CR_7MHz  = $01
-  289                     
-  290           0502      VDC_HSR_320  = $0502
-  291           0427      VDC_HDR_320  = $0427
-  292                     
-  293           0402      VDC_HSR_336  = $0402
-  294           0429      VDC_HDR_336  = $0429
-  295                     
-  296                     ; VDC constants for 480 & 512 wide display.
-  297                     
-  298           0002      VCE_CR_10MHz = $02
-  299                     
-  300           0C02      VDC_HSR_480  = $0C02
-  301           043C      VDC_HDR_480  = $043C
-  302                     
-  303           0B02      VDC_HSR_512  = $0B02
-  304           043F      VDC_HDR_512  = $043F
-  305                     
-  306                     ; VDC constants for 200, 224 & 240 high display.
-  307                     
-  308           2302      VDC_VPR_200  = $2302
-  309           00C7      VDC_VDW_200  = $00C7
-  310           0018      VDC_VCR_200  = $0018
-  311                     
-  312           1702      VDC_VPR_224  = $1702
-  313           00DF      VDC_VDW_224  = $00DF
-  314           000C      VDC_VCR_224  = $000C
-  315                     
-  316           0F02      VDC_VPR_240  = $0F02
-  317           00EF      VDC_VDW_240  = $00EF
-  318           0004      VDC_VCR_240  = $0004 ; $00F6
-  319                     
-  320                     ; VDC constants for different BAT screen sizes.
-  321                     
-  322           0000      VDC_MWR_32x32  = $0000
-  323           0040      VDC_MWR_32x64  = $0040
-  324                     
-  325           0010      VDC_MWR_64x32  = $0010
-  326           0050      VDC_MWR_64x64  = $0050
-  327                     
-  328           0020      VDC_MWR_128x32 = $0020
-  329           0060      VDC_MWR_128x64 = $0060
-  330                     
-  331                     ; Table of VDC values to set on boot.
-  332                     
-  333  00:42D6            boot_video_mode:
-  334  00:42D6  05        	.db     VDC_CR                  ; Control Register
-  335  00:42D7  00 00     	.dw     $0000
-  336  00:42D9  06        	.db     VDC_RCR                 ; Raster Counter Register
-  337  00:42DA  00 00     	.dw     $0000
-  338  00:42DC  07        	.db     VDC_BXR                 ; Background X-Scroll Register
-  339  00:42DD  00 00     	.dw     $0000
-  340  00:42DF  08        	.db     VDC_BYR                 ; Background Y-Scroll Register
-  341  00:42E0  00 00     	.dw     $0000
-  342  00:42E2  09        	.db     VDC_MWR                 ; Memory-access Width Register
-  343  00:42E3  50 00     	.dw     VDC_MWR_64x64
-  344  00:42E5  0A        	.db     VDC_HSR                 ; Horizontal Sync Register
-  345  00:42E6  02 02     	.dw     VDC_HSR_256
-  346  00:42E8  0B        	.db     VDC_HDR                 ; Horizontal Display Register
-  347  00:42E9  1F 04     	.dw     VDC_HDR_256
-  348  00:42EB  0C        	.db     VDC_VPR                 ; Vertical Sync Register
-  349  00:42EC  02 17     	.dw     VDC_VPR_224
-  350  00:42EE  0D        	.db     VDC_VDW                 ; Vertical Display Register
-  351  00:42EF  DF 00     	.dw     VDC_VDW_224
-  352  00:42F1  0E        	.db     VDC_VCR                 ; Vertical Display END position Register
-  353  00:42F2  0C 00     	.dw     VDC_VCR_224
-  354  00:42F4  0F        	.db     VDC_DCR                 ; DMA Control Register
-  355  00:42F5  10 00     	.dw     $0010
-  356  00:42F7  13        	.db     VDC_SATB                ; SATB  address of the SATB
-  357  00:42F8  7F 00     	.dw     $007F
-  358  00:42FA  00        	.db     0
-  359                     
-  360                     	
+  288           0000      VDC_MWR_32x32  = $0000
+  289           0040      VDC_MWR_32x64  = $0040
+  290                     
+  291           0010      VDC_MWR_64x32  = $0010
+  292           0050      VDC_MWR_64x64  = $0050
+  293                     
+  294           0020      VDC_MWR_128x32 = $0020
+  295           0060      VDC_MWR_128x64 = $0060
+  296                     
+  297                     ; Table of VDC values to set on boot.
+  298                     
+  299  00:41C0            boot_video_mode:
+  300  00:41C0  05        	.db     VDC_CR                  ; Control Register
+  301  00:41C1  00 00     	.dw     $0000
+  302  00:41C3  06        	.db     VDC_RCR                 ; Raster Counter Register
+  303  00:41C4  00 00     	.dw     $0000
+  304  00:41C6  07        	.db     VDC_BXR                 ; Background X-Scroll Register
+  305  00:41C7  00 00     	.dw     $0000
+  306  00:41C9  08        	.db     VDC_BYR                 ; Background Y-Scroll Register
+  307  00:41CA  00 00     	.dw     $0000
+  308  00:41CC  09        	.db     VDC_MWR                 ; Memory-access Width Register
+  309  00:41CD  50 00     	.dw     VDC_MWR_64x64
+  310  00:41CF  0A        	.db     VDC_HSR                 ; Horizontal Sync Register
+  311  00:41D0  02 02     	.dw     VDC_HSR_256
+  312  00:41D2  0B        	.db     VDC_HDR                 ; Horizontal Display Register
+  313  00:41D3  1F 04     	.dw     VDC_HDR_256
+  314  00:41D5  0C        	.db     VDC_VPR                 ; Vertical Sync Register
+  315  00:41D6  02 17     	.dw     VDC_VPR_224
+  316  00:41D8  0D        	.db     VDC_VDW                 ; Vertical Display Register
+  317  00:41D9  DF 00     	.dw     VDC_VDW_224
+  318  00:41DB  0E        	.db     VDC_VCR                 ; Vertical Display END position Register
+  319  00:41DC  0C 00     	.dw     VDC_VCR_224
+  320  00:41DE  0F        	.db     VDC_DCR                 ; DMA Control Register
+  321  00:41DF  10 00     	.dw     $0010
+  322  00:41E1  13        	.db     VDC_SATB                ; SATB  address of the SATB
+  323  00:41E2  7F 00     	.dw     $007F
+  324  00:41E4  00        	.db     0
+  325                     
+  326                     	
