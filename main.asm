@@ -35,11 +35,17 @@
 	; CC65 hardware equates (because I prefer them).
 	.include "pce.inc"
 	
+	; Variables
+	.include "variables.asm"
+	
 	; CD routines & macros
 	.include "cd.asm"
 	
 	; Scroll routines
 	.include "scroll.asm"
+	
+	; Player routines
+	.include "player.asm"
 
 	;asset location on cd-rom
 	.include "cd_labels.asm"
@@ -47,19 +53,14 @@
 	;-----asset load pointers-----
 tile_load equ $8000
 pal_load equ $a000 ;palette is 32 bytes
-map_load equ $a020
+heights_load equ $a020 ;height array indices
+map_load equ $a060
+
+	;-----misc constants-----
+satb_vram equ $1000 ;where satb is in vram
 
 	.list
 	.mlist
-	.zp
-	
-	scroll_x: .ds 2
-	scroll_y: .ds 2
-	status: .ds 1
-	frame: .ds 2
-	joypad: .ds 1
-	joyedge: .ds 1 ;1 when pad transitioned from 0 to 1
-
 	.data
 
 	.code
@@ -90,8 +91,14 @@ boot:
 	jsr ex_vsync
 	jsr ex_vsync
 	
+	;initialize zero-page variables
+	stz start_vars
+	tii start_vars,start_vars+1,(end_vars-start_vars)
+	
+	;load sprites
+	cd_load _ADDR_spritegfx,#$68,#_SECSIZE_spritegfx
 	;load level gfx & map
-	cd_load _ADDR_level1,#$82,#8
+	cd_load _ADDR_level1,#$82,#_SECSIZE_level1
 	
 	;play cdda
 	; lda #2 ;track 2
@@ -108,36 +115,54 @@ boot:
 	vreg #VDC_VWR
 	tia tile_load,video_data,$2000
 	; ;copy bg data
-	; ldx #18
-	; ldy #18
-	; jsr scroll_fill
+	stw #map_load,<_si
+	jsr scroll_fill
+	
+	;copy sprite palette
+	lda #$68
+	tam #4
+	stw #$8000,<_ax
+	stw #$0100,VCE_ADDR_LO ;sprite palette 0
+	jsr copy_palette
+	
+	;copy sprite tiles
+	vreg #VDC_MAWR
+	stw #$3000,video_data
+	vreg #VDC_VWR
+	tia $8020,video_data,$400
+	lda #$82
+	tam #4
+	
+	;zero out SATB
+	stz satb
+	tii satb,satb+1,511
+	
+	jsr player_init
 	
 	;init scroll
-	; stw #(28*16),<scroll_x
-	; stw #(19*16),<scroll_y
 	stwz <scroll_x
 	stwz <scroll_y
 	
 	;main loop
 main:
-	;d-pad up
-	bbr4 <joypad,.no_up
-	decw <scroll_y
-.no_up:
-	;d-pad right
-	bbr5 <joypad,.no_right
-	incw <scroll_x
-.no_right:
-	;d-pad down
-	bbr6 <joypad,.no_down
-	incw <scroll_y
-.no_down:
-	;d-pad left
-	bbr7 <joypad,.no_left
-	decw <scroll_x
-.no_left:
+	; ;d-pad up
+	; bbr4 <joypad,.no_up
+	; decw <scroll_y
+; .no_up:
+	; ;d-pad right
+	; bbr5 <joypad,.no_right
+	; incw <scroll_x
+; .no_right:
+	; ;d-pad down
+	; bbr6 <joypad,.no_down
+	; incw <scroll_y
+; .no_down:
+	; ;d-pad left
+	; bbr7 <joypad,.no_left
+	; decw <scroll_x
+; .no_left:
 
-	jsr scroll_downrow
+	jsr player_iterate
 	
 	lda #1
 	sta <status
@@ -153,9 +178,16 @@ my_vsync:
 
 	;set scroll pos
 	vreg #VDC_BXR
+	lda <scroll_x
 	stw <scroll_x,video_data
 	vreg #VDC_BYR
 	stw <scroll_y,video_data
+	
+	;copy SATB mirror
+	vreg #VDC_MAWR
+	stw #satb_vram,video_data
+	vreg #VDC_VWR
+	tia satb,video_data,512
 	
 	lda #1 ;read joypad 1
 	jsr ex_joysns
@@ -320,7 +352,9 @@ boot_video_mode:
 	.db     VDC_DCR                 ; DMA Control Register
 	.dw     $0010
 	.db     VDC_SATB                ; SATB  address of the SATB
-	.dw     $007F
+	.dw     satb_vram
 	.db     0
 
+;block height arrays
+	.include "blocks.asm"
 	

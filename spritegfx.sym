@@ -1,0 +1,11 @@
+Bank	Addr	Label
+----	----	-----
+f0	0002	_nb_bank			
+f0	2201	_bss_end			
+f0	0001	MAGICKIT			
+f0	0002	CDROM				
+68	0020	PlayerChr			
+68	0000	PlayerPal			
+f0	0000	DEVELO				
+f0	0068	_bank_base			
+f0	0069	_call_bank			

@@ -31,7 +31,7 @@ cd_load .macro
 .endm
 
 ;-----cd functions-----
-
+	.code
 	.bank 1
 	.org $6000
 
