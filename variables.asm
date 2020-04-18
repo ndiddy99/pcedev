@@ -28,6 +28,8 @@ start_vars:
 	player_y: .ds 3
 	player_dx: .ds 2
 	player_dy: .ds 2
+	player_state: .ds 1
+	player_frame: .ds 1
 end_vars:	
 	.bss
 	;work ram variables

@@ -25,6 +25,8 @@ PLAYERSPR_X .equ 152 ;onscreen sprite position
 PLAYERSPR_Y .equ 160
 PLAYER_WIDTH .equ 16
 PLAYER_HEIGHT .equ 32
+STATE_GROUND .equ 0
+STATE_AIR .equ 1
 
 player_init:
 	;write player sprite to satb
@@ -34,6 +36,8 @@ player_init:
 	stw	#%0_0_01_0_00_0_1_000_0000,satb+6 ;Attributes
 	stw #PLAYERSPR_X,<player_x+1
 	stw #PLAYERSPR_Y,<player_y+1
+	
+	stz <player_state
 	
 	rts
 
@@ -80,15 +84,15 @@ player_iterate:
 	bne .negative_add
 	;positive add
 	addw <player_dx,<player_x
-	lda player_x+2
+	lda <player_x+2
 	adc #$0
-	sta player_x+2
+	sta <player_x+2
 	bra .done_add
 .negative_add:
 	addw <player_dx,<player_x
-	lda player_x+2
+	lda <player_x+2
 	adc #$ff
-	sta player_x+2
+	sta <player_x+2
 .done_add:
 ;-----collision detection-----
 ;check left foot
@@ -107,6 +111,17 @@ player_iterate:
 	bmi .left_higher
 	stw <_dx,<pad
 .left_higher:
+	cmpw #$0,<player_dy ;don't check for ground collision if moving upwards
+	bmi .done_ground
+	cmpw #$fff0,<pad ;-16 is the value returned if no ground is found
+	bne .on_ground 
+	lda #STATE_AIR
+	sta <player_state
+	bra .done_ground
+.on_ground:
+	lda #STATE_GROUND
+	sta <player_state
+	stwz <player_dy
 	;foot pos in ax
 	stw <player_y+1,<_ax
 	addw #PLAYER_HEIGHT,<_ax
@@ -118,11 +133,52 @@ player_iterate:
 	;translate from foot pos to sprite pos
 	subw #PLAYER_HEIGHT,<_ax
 	stw <_ax,<player_y+1
-
+.done_ground:
 	
 ;-----done collision detection-----
 	stw <player_x+1,<scroll_x
 	subw #PLAYERSPR_X,<scroll_x
+	
+;-----jumping & falling-----
+	bbr0 <joypad,.done_one
+	lda <player_state
+	cmp #STATE_AIR
+	beq .done_one
+	stw #-($900),<player_dy
+	lda #STATE_AIR
+	sta <player_state
+.done_one:	
+	
+	lda <player_state
+	cmp #STATE_AIR
+	bne .done_air
+	;jump higher if player's still holding I
+	bbr0 <joypad,.normal_gravity
+	cmpw #$0,<player_dy
+	; beq .normal_gravity
+	bpl .normal_gravity
+	addw #$40,<player_dy
+	bra .done_gravity
+	
+.normal_gravity:
+	addw #ACCEL,<player_dy
+.done_gravity:
+	;add dy to player_y
+	lda <player_dy+1
+	and #%10000000
+	bne .negative_dy
+	;positive add
+	addw <player_dy,<player_y
+	lda player_y+2
+	adc #$0
+	sta player_y+2
+	bra .done_air
+.negative_dy:
+	addw <player_dy,<player_y
+	lda player_y+2
+	adc #$ff
+	sta player_y+2
+.done_air:
 	stw <player_y+1,<scroll_y
 	subw #PLAYERSPR_Y,<scroll_y
 	rts
