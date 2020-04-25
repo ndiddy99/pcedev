@@ -264,62 +264,66 @@
    21                     
    22           0400      TOP_SPEED .equ $400
    23           0080      ACCEL .equ $80
-   24           0098      PLAYERSPR_X .equ 152 ;onscreen sprite position
-   25           00A0      PLAYERSPR_Y .equ 160
-   26           0010      PLAYER_WIDTH .equ 16
-   27           0020      PLAYER_HEIGHT .equ 32
-   28           0000      STATE_GROUND .equ 0
-   29           0001      STATE_AIR .equ 1
-   30                     
-   31  01:6141            player_init:
-   32                     	;write player sprite to satb
-   33                     	stw #PLAYERSPR_Y,satb ;y pos
+   24           00A0      GRAVITY .equ $a0
+   25           0070      JUMP_GRAVITY .equ $70
+   26           0098      PLAYERSPR_X .equ 152 ;onscreen sprite position
+   27           00A0      PLAYERSPR_Y .equ 160
+   28           0010      PLAYER_WIDTH .equ 16
+   29           0020      PLAYER_HEIGHT .equ 32
+   30           0008      TSENSOR_HEIGHT .equ 8
+   31           0018      BSENSOR_HEIGHT .equ 24
+   32           0000      STATE_GROUND .equ 0
+   33           0001      STATE_AIR .equ 1
+   34                     
+   35  01:6141            player_init:
+   36                     	;write player sprite to satb
+   37                     	stw #PLAYERSPR_Y,satb ;y pos
        01:6141  A9 A0     	lda	LOW_BYTE #PLAYERSPR_Y
        01:6143  8D 7C 26  	sta	LOW_BYTE satb
        01:6146  A9 00     	lda	HIGH_BYTE #PLAYERSPR_Y
        01:6148  8D 7D 26  	sta	HIGH_BYTE satb
-   34                     	stw #PLAYERSPR_X,satb+2 ;x pos
+   38                     	stw #PLAYERSPR_X,satb+2 ;x pos
        01:614B  A9 98     	lda	LOW_BYTE #PLAYERSPR_X
        01:614D  8D 7E 26  	sta	LOW_BYTE satb+2
        01:6150  A9 00     	lda	HIGH_BYTE #PLAYERSPR_X
        01:6152  8D 7F 26  	sta	HIGH_BYTE satb+2
-   35                     	stw #($3000/32),satb+4 ;tile number
+   39                     	stw #($3000/32),satb+4 ;tile number
        01:6155  A9 80     	lda	LOW_BYTE #($3000/32)
        01:6157  8D 80 26  	sta	LOW_BYTE satb+4
        01:615A  A9 01     	lda	HIGH_BYTE #($3000/32)
        01:615C  8D 81 26  	sta	HIGH_BYTE satb+4
-   36                     	stw	#%0_0_01_0_00_0_1_000_0000,satb+6 ;Attributes
+   40                     	stw	#%0_0_01_0_00_0_1_000_0000,satb+6 ;Attributes
        01:615F  A9 80     	lda	LOW_BYTE #%0_0_01_0_00_0_1_000_0000
        01:6161  8D 82 26  	sta	LOW_BYTE satb+6
        01:6164  A9 10     	lda	HIGH_BYTE #%0_0_01_0_00_0_1_000_0000
        01:6166  8D 83 26  	sta	HIGH_BYTE satb+6
-   37                     	stw #PLAYERSPR_X,<player_x+1
+   41                     	stw #PLAYERSPR_X,<player_x+1
        01:6169  A9 98     	lda	LOW_BYTE #PLAYERSPR_X
        01:616B  85 12     	sta	LOW_BYTE <player_x+1
        01:616D  A9 00     	lda	HIGH_BYTE #PLAYERSPR_X
        01:616F  85 13     	sta	HIGH_BYTE <player_x+1
-   38                     	stw #PLAYERSPR_Y,<player_y+1
+   42                     	stw #PLAYERSPR_Y,<player_y+1
        01:6171  A9 A0     	lda	LOW_BYTE #PLAYERSPR_Y
        01:6173  85 15     	sta	LOW_BYTE <player_y+1
        01:6175  A9 00     	lda	HIGH_BYTE #PLAYERSPR_Y
        01:6177  85 16     	sta	HIGH_BYTE <player_y+1
-   39                     	
-   40  01:6179  64 1B     	stz <player_state
-   41                     	
-   42  01:617B  60        	rts
-   43                     
-   44  01:617C            player_iterate:
-   45                     ;-----read input, set initial speed values-----
-   46  01:617C  5F 0F 19  	bbr5 <joypad,.done_right
-   47                     	cmpw #TOP_SPEED,<player_dx
+   43                     	
+   44  01:6179  64 1B     	stz <player_state
+   45                     	
+   46  01:617B  60        	rts
+   47                     
+   48  01:617C            player_iterate:
+   49                     ;-----horizontal movement-----
+   50  01:617C  5F 0F 19  	bbr5 <joypad,.done_right
+   51                     	cmpw #TOP_SPEED,<player_dx
        01:617F  A5 18     	lda	HIGH_BYTE <player_dx
        01:6181  C9 04     	cmp	HIGH_BYTE #TOP_SPEED
        01:6183  D0 04     	bne	.x_00033
        01:6185  A5 17     	lda	LOW_BYTE <player_dx
        01:6187  C9 00     	cmp	LOW_BYTE #TOP_SPEED
        01:6189            .x_00033:
-   48  01:6189  10 0D     	bpl .done_right
-   49                     	addw #ACCEL,<player_dx
+   52  01:6189  10 0D     	bpl .done_right
+   53                     	addw #ACCEL,<player_dx
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
@@ -332,18 +336,18 @@
        01:6194  69 00     	adc	HIGH_BYTE #ACCEL
        01:6196  85 18     	sta	HIGH_BYTE <player_dx
                           .endif
-   50  01:6198            .done_right:
-   51  01:6198  7F 0F 1B  	bbr7 <joypad,.done_left
-   52                     	cmpw #-TOP_SPEED,<player_dx
+   54  01:6198            .done_right:
+   55  01:6198  7F 0F 1B  	bbr7 <joypad,.done_left
+   56                     	cmpw #-TOP_SPEED,<player_dx
        01:619B  A5 18     	lda	HIGH_BYTE <player_dx
        01:619D  C9 FC     	cmp	HIGH_BYTE #-TOP_SPEED
        01:619F  D0 04     	bne	.x_00035
        01:61A1  A5 17     	lda	LOW_BYTE <player_dx
        01:61A3  C9 00     	cmp	LOW_BYTE #-TOP_SPEED
        01:61A5            .x_00035:
-   53  01:61A5  30 0F     	bmi .done_left
-   54  01:61A7  F0 0D     	beq .done_left
-   55                     	subw #ACCEL,<player_dx
+   57  01:61A5  30 0F     	bmi .done_left
+   58  01:61A7  F0 0D     	beq .done_left
+   59                     	subw #ACCEL,<player_dx
        01:61A9  38        	sec
        01:61AA  A5 17     	lda	LOW_BYTE <player_dx
        01:61AC  E9 80     	sbc	LOW_BYTE #ACCEL
@@ -351,24 +355,24 @@
        01:61B0  A5 18     	lda	HIGH_BYTE <player_dx
        01:61B2  E9 00     	sbc	HIGH_BYTE #ACCEL
        01:61B4  85 18     	sta	HIGH_BYTE <player_dx
-   56  01:61B6            .done_left:
-   57                     	;deceleration only happens when not pressing left or right
-   58  01:61B6  A5 0F     	lda <joypad
-   59  01:61B8  29 A0     	and #%10100000
-   60  01:61BA  D0 4C     	bne .done_decel
-   61                     	cmpw #0,<player_dx
+   60  01:61B6            .done_left:
+   61                     	;deceleration only happens when not pressing left or right
+   62  01:61B6  A5 0F     	lda <joypad
+   63  01:61B8  29 A0     	and #%10100000
+   64  01:61BA  D0 4C     	bne .done_decel
+   65                     	cmpw #0,<player_dx
        01:61BC  A5 18     	lda	HIGH_BYTE <player_dx
        01:61BE  C9 00     	cmp	HIGH_BYTE #0
        01:61C0  D0 04     	bne	.x_00037
        01:61C2  A5 17     	lda	LOW_BYTE <player_dx
        01:61C4  C9 00     	cmp	LOW_BYTE #0
        01:61C6            .x_00037:
-   62                     	;if player_dx is 0, don't decelerate
-   63  01:61C6  F0 40     	beq .done_decel
-   64  01:61C8  10 02     	bpl .decel_right
-   65  01:61CA  30 1F     	bmi .decel_left
-   66  01:61CC            .decel_right:
-   67                     	subw #ACCEL,<player_dx
+   66                     	;if player_dx is 0, don't decelerate
+   67  01:61C6  F0 40     	beq .done_decel
+   68  01:61C8  10 02     	bpl .decel_right
+   69  01:61CA  30 1F     	bmi .decel_left
+   70  01:61CC            .decel_right:
+   71                     	subw #ACCEL,<player_dx
        01:61CC  38        	sec
        01:61CD  A5 17     	lda	LOW_BYTE <player_dx
        01:61CF  E9 80     	sbc	LOW_BYTE #ACCEL
@@ -376,22 +380,22 @@
        01:61D3  A5 18     	lda	HIGH_BYTE <player_dx
        01:61D5  E9 00     	sbc	HIGH_BYTE #ACCEL
        01:61D7  85 18     	sta	HIGH_BYTE <player_dx
-   68                     	;if value goes under zero, make it zero
-   69                     	cmpw #0,<player_dx
+   72                     	;if value goes under zero, make it zero
+   73                     	cmpw #0,<player_dx
        01:61D9  A5 18     	lda	HIGH_BYTE <player_dx
        01:61DB  C9 00     	cmp	HIGH_BYTE #0
        01:61DD  D0 04     	bne	.x_00039
        01:61DF  A5 17     	lda	LOW_BYTE <player_dx
        01:61E1  C9 00     	cmp	LOW_BYTE #0
        01:61E3            .x_00039:
-   70  01:61E3  10 04     	bpl .dont_zero_right
-   71                     	stwz <player_dx
+   74  01:61E3  10 04     	bpl .dont_zero_right
+   75                     	stwz <player_dx
        01:61E5  64 17     	stz	LOW_BYTE <player_dx
        01:61E7  64 18     	stz	HIGH_BYTE <player_dx
-   72  01:61E9            .dont_zero_right:
-   73  01:61E9  80 1D     	bra .done_decel
-   74  01:61EB            .decel_left:
-   75                     	addw #ACCEL,<player_dx
+   76  01:61E9            .dont_zero_right:
+   77  01:61E9  80 1D     	bra .done_decel
+   78  01:61EB            .decel_left:
+   79                     	addw #ACCEL,<player_dx
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
@@ -404,25 +408,25 @@
        01:61F4  69 00     	adc	HIGH_BYTE #ACCEL
        01:61F6  85 18     	sta	HIGH_BYTE <player_dx
                           .endif
-   76                     	; if value goes over zero, make it zero
-   77                     	cmpw #0,<player_dx
+   80                     	; if value goes over zero, make it zero
+   81                     	cmpw #0,<player_dx
        01:61F8  A5 18     	lda	HIGH_BYTE <player_dx
        01:61FA  C9 00     	cmp	HIGH_BYTE #0
        01:61FC  D0 04     	bne	.x_00042
        01:61FE  A5 17     	lda	LOW_BYTE <player_dx
        01:6200  C9 00     	cmp	LOW_BYTE #0
        01:6202            .x_00042:
-   78  01:6202  30 04     	bmi .done_decel
-   79                     	stwz <player_dx
+   82  01:6202  30 04     	bmi .done_decel
+   83                     	stwz <player_dx
        01:6204  64 17     	stz	LOW_BYTE <player_dx
        01:6206  64 18     	stz	HIGH_BYTE <player_dx
-   80  01:6208            .done_decel:
-   81                     	;add dx to player_x
-   82  01:6208  A5 18     	lda <player_dx+1
-   83  01:620A  29 80     	and #%10000000
-   84  01:620C  D0 15     	bne .negative_add
-   85                     	;positive add
-   86                     	addw <player_dx,<player_x
+   84  01:6208            .done_decel:
+   85                     	;add dx to player_x
+   86  01:6208  A5 18     	lda <player_dx+1
+   87  01:620A  29 80     	and #%10000000
+   88  01:620C  D0 15     	bne .negative_add
+   89                     	;positive add
+   90                     	addw <player_dx,<player_x
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
@@ -435,12 +439,12 @@
        01:6217  65 18     	adc	HIGH_BYTE <player_dx
        01:6219  85 12     	sta	HIGH_BYTE <player_x
                           .endif
-   87  01:621B  A5 13     	lda <player_x+2
-   88  01:621D  69 00     	adc #$0
-   89  01:621F  85 13     	sta <player_x+2
-   90  01:6221  80 13     	bra .done_add
-   91  01:6223            .negative_add:
-   92                     	addw <player_dx,<player_x
+   91  01:621B  A5 13     	lda <player_x+2
+   92  01:621D  69 00     	adc #$0
+   93  01:621F  85 13     	sta <player_x+2
+   94  01:6221  80 13     	bra .done_add
+   95  01:6223            .negative_add:
+   96                     	addw <player_dx,<player_x
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
@@ -453,538 +457,791 @@
        01:622C  65 18     	adc	HIGH_BYTE <player_dx
        01:622E  85 12     	sta	HIGH_BYTE <player_x
                           .endif
-   93  01:6230  A5 13     	lda <player_x+2
-   94  01:6232  69 FF     	adc #$ff
-   95  01:6234  85 13     	sta <player_x+2
-   96  01:6236            .done_add:
-   97                     ;-----collision detection-----
-   98                     ;check left foot
-   99                     	stw <player_x+1,<_ax
+   97  01:6230  A5 13     	lda <player_x+2
+   98  01:6232  69 FF     	adc #$ff
+   99  01:6234  85 13     	sta <player_x+2
+  100  01:6236            .done_add:
+  101                     ;-----collision detection-----
+  102                     	;top left
+  103                     	stw <player_x+1,<_ax
        01:6236  A5 12     	lda	LOW_BYTE <player_x+1
        01:6238  85 F8     	sta	LOW_BYTE <_ax
        01:623A  A5 13     	lda	HIGH_BYTE <player_x+1
        01:623C  85 F9     	sta	HIGH_BYTE <_ax
-  100                     	stw <player_y+1,<_bx
+  104                     	stw <player_y+1,<_bx
        01:623E  A5 15     	lda	LOW_BYTE <player_y+1
        01:6240  85 FA     	sta	LOW_BYTE <_bx
        01:6242  A5 16     	lda	HIGH_BYTE <player_y+1
        01:6244  85 FB     	sta	HIGH_BYTE <_bx
-  101                     	addw #PLAYER_HEIGHT,<_bx
+  105                     	addw #TSENSOR_HEIGHT,<_bx
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
                           	;
        01:6246  18        	clc
        01:6247  A5 FA     	lda	LOW_BYTE <_bx
-       01:6249  69 20     	adc	LOW_BYTE #PLAYER_HEIGHT
+       01:6249  69 08     	adc	LOW_BYTE #TSENSOR_HEIGHT
        01:624B  85 FA     	sta	LOW_BYTE <_bx
        01:624D  A5 FB     	lda	HIGH_BYTE <_bx
-       01:624F  69 00     	adc	HIGH_BYTE #PLAYER_HEIGHT
+       01:624F  69 00     	adc	HIGH_BYTE #TSENSOR_HEIGHT
        01:6251  85 FB     	sta	HIGH_BYTE <_bx
                           .endif
-  102  01:6253  20 B8 63  	jsr get_sensor
-  103                     	stw <_dx,<pad
-       01:6256  A5 FE     	lda	LOW_BYTE <_dx
-       01:6258  85 00     	sta	LOW_BYTE <pad
-       01:625A  A5 FF     	lda	HIGH_BYTE <_dx
-       01:625C  85 01     	sta	HIGH_BYTE <pad
-  104                     ;check right foot
-  105                     	stw <player_x+1,<_ax
-       01:625E  A5 12     	lda	LOW_BYTE <player_x+1
-       01:6260  85 F8     	sta	LOW_BYTE <_ax
-       01:6262  A5 13     	lda	HIGH_BYTE <player_x+1
-       01:6264  85 F9     	sta	HIGH_BYTE <_ax
-  106                     	addw #PLAYER_WIDTH,<_ax
+  106  01:6253  20 81 65  	jsr get_height
+  107  01:6256  F0 03     	beq .nohcollision_left
+  108  01:6258  4C E1 62  	jmp .hcollision_left
+  109  01:625B            .nohcollision_left
+  110                     	;bottom left
+  111                     	stw <player_x+1,<_ax
+       01:625B  A5 12     	lda	LOW_BYTE <player_x+1
+       01:625D  85 F8     	sta	LOW_BYTE <_ax
+       01:625F  A5 13     	lda	HIGH_BYTE <player_x+1
+       01:6261  85 F9     	sta	HIGH_BYTE <_ax
+  112                     	stw <player_y+1,<_bx
+       01:6263  A5 15     	lda	LOW_BYTE <player_y+1
+       01:6265  85 FA     	sta	LOW_BYTE <_bx
+       01:6267  A5 16     	lda	HIGH_BYTE <player_y+1
+       01:6269  85 FB     	sta	HIGH_BYTE <_bx
+  113                     	addw #BSENSOR_HEIGHT,<_bx
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
                           	;
-       01:6266  18        	clc
-       01:6267  A5 F8     	lda	LOW_BYTE <_ax
-       01:6269  69 10     	adc	LOW_BYTE #PLAYER_WIDTH
-       01:626B  85 F8     	sta	LOW_BYTE <_ax
-       01:626D  A5 F9     	lda	HIGH_BYTE <_ax
-       01:626F  69 00     	adc	HIGH_BYTE #PLAYER_WIDTH
-       01:6271  85 F9     	sta	HIGH_BYTE <_ax
+       01:626B  18        	clc
+       01:626C  A5 FA     	lda	LOW_BYTE <_bx
+       01:626E  69 18     	adc	LOW_BYTE #BSENSOR_HEIGHT
+       01:6270  85 FA     	sta	LOW_BYTE <_bx
+       01:6272  A5 FB     	lda	HIGH_BYTE <_bx
+       01:6274  69 00     	adc	HIGH_BYTE #BSENSOR_HEIGHT
+       01:6276  85 FB     	sta	HIGH_BYTE <_bx
                           .endif
-  107                     	stw <player_y+1,<_bx
-       01:6273  A5 15     	lda	LOW_BYTE <player_y+1
-       01:6275  85 FA     	sta	LOW_BYTE <_bx
-       01:6277  A5 16     	lda	HIGH_BYTE <player_y+1
-       01:6279  85 FB     	sta	HIGH_BYTE <_bx
-  108                     	addw #PLAYER_HEIGHT,<_bx
+  114  01:6278  20 81 65  	jsr get_height
+  115  01:627B  C9 10     	cmp #$10
+  116  01:627D  F0 62     	beq .hcollision_left
+  117                     	;top right
+  118                     	stw <player_x+1,<_ax
+       01:627F  A5 12     	lda	LOW_BYTE <player_x+1
+       01:6281  85 F8     	sta	LOW_BYTE <_ax
+       01:6283  A5 13     	lda	HIGH_BYTE <player_x+1
+       01:6285  85 F9     	sta	HIGH_BYTE <_ax
+  119                     	addw #PLAYER_WIDTH,<_ax
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
                           	;
-       01:627B  18        	clc
-       01:627C  A5 FA     	lda	LOW_BYTE <_bx
-       01:627E  69 20     	adc	LOW_BYTE #PLAYER_HEIGHT
-       01:6280  85 FA     	sta	LOW_BYTE <_bx
-       01:6282  A5 FB     	lda	HIGH_BYTE <_bx
-       01:6284  69 00     	adc	HIGH_BYTE #PLAYER_HEIGHT
-       01:6286  85 FB     	sta	HIGH_BYTE <_bx
+       01:6287  18        	clc
+       01:6288  A5 F8     	lda	LOW_BYTE <_ax
+       01:628A  69 10     	adc	LOW_BYTE #PLAYER_WIDTH
+       01:628C  85 F8     	sta	LOW_BYTE <_ax
+       01:628E  A5 F9     	lda	HIGH_BYTE <_ax
+       01:6290  69 00     	adc	HIGH_BYTE #PLAYER_WIDTH
+       01:6292  85 F9     	sta	HIGH_BYTE <_ax
                           .endif
-  109  01:6288  20 B8 63  	jsr get_sensor
-  110                     	cmpw <pad,<_dx
-       01:628B  A5 FF     	lda	HIGH_BYTE <_dx
-       01:628D  C5 01     	cmp	HIGH_BYTE <pad
-       01:628F  D0 04     	bne	.x_00054
-       01:6291  A5 FE     	lda	LOW_BYTE <_dx
-       01:6293  C5 00     	cmp	LOW_BYTE <pad
-       01:6295            .x_00054:
-  111  01:6295  30 08     	bmi .left_higher
-  112                     	stw <_dx,<pad
-       01:6297  A5 FE     	lda	LOW_BYTE <_dx
-       01:6299  85 00     	sta	LOW_BYTE <pad
-       01:629B  A5 FF     	lda	HIGH_BYTE <_dx
-       01:629D  85 01     	sta	HIGH_BYTE <pad
-  113  01:629F            .left_higher:
-  114                     	cmpw #$0,<player_dy ;don't check for ground collision if moving upwards
-       01:629F  A5 1A     	lda	HIGH_BYTE <player_dy
-       01:62A1  C9 00     	cmp	HIGH_BYTE #$0
-       01:62A3  D0 04     	bne	.x_00056
-       01:62A5  A5 19     	lda	LOW_BYTE <player_dy
-       01:62A7  C9 00     	cmp	LOW_BYTE #$0
-       01:62A9            .x_00056:
-  115  01:62A9  30 6A     	bmi .done_ground
-  116                     	cmpw #$fff0,<pad ;-16 is the value returned if no ground is found
-       01:62AB  A5 01     	lda	HIGH_BYTE <pad
-       01:62AD  C9 FF     	cmp	HIGH_BYTE #$fff0
-       01:62AF  D0 04     	bne	.x_00057
-       01:62B1  A5 00     	lda	LOW_BYTE <pad
-       01:62B3  C9 F0     	cmp	LOW_BYTE #$fff0
-       01:62B5            .x_00057:
-  117  01:62B5  D0 06     	bne .on_ground 
-  118  01:62B7  A9 01     	lda #STATE_AIR
-  119  01:62B9  85 1B     	sta <player_state
-  120  01:62BB  80 58     	bra .done_ground
-  121  01:62BD            .on_ground:
-  122  01:62BD  A9 00     	lda #STATE_GROUND
-  123  01:62BF  85 1B     	sta <player_state
-  124                     	stwz <player_dy
-       01:62C1  64 19     	stz	LOW_BYTE <player_dy
-       01:62C3  64 1A     	stz	HIGH_BYTE <player_dy
-  125                     	;foot pos in ax
-  126                     	stw <player_y+1,<_ax
-       01:62C5  A5 15     	lda	LOW_BYTE <player_y+1
-       01:62C7  85 F8     	sta	LOW_BYTE <_ax
-       01:62C9  A5 16     	lda	HIGH_BYTE <player_y+1
-       01:62CB  85 F9     	sta	HIGH_BYTE <_ax
-  127                     	addw #PLAYER_HEIGHT,<_ax
+  120                     	stw <player_y+1,<_bx
+       01:6294  A5 15     	lda	LOW_BYTE <player_y+1
+       01:6296  85 FA     	sta	LOW_BYTE <_bx
+       01:6298  A5 16     	lda	HIGH_BYTE <player_y+1
+       01:629A  85 FB     	sta	HIGH_BYTE <_bx
+  121                     	addw #TSENSOR_HEIGHT,<_bx
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
                           	;
-       01:62CD  18        	clc
-       01:62CE  A5 F8     	lda	LOW_BYTE <_ax
-       01:62D0  69 20     	adc	LOW_BYTE #PLAYER_HEIGHT
-       01:62D2  85 F8     	sta	LOW_BYTE <_ax
-       01:62D4  A5 F9     	lda	HIGH_BYTE <_ax
-       01:62D6  69 00     	adc	HIGH_BYTE #PLAYER_HEIGHT
-       01:62D8  85 F9     	sta	HIGH_BYTE <_ax
+       01:629C  18        	clc
+       01:629D  A5 FA     	lda	LOW_BYTE <_bx
+       01:629F  69 08     	adc	LOW_BYTE #TSENSOR_HEIGHT
+       01:62A1  85 FA     	sta	LOW_BYTE <_bx
+       01:62A3  A5 FB     	lda	HIGH_BYTE <_bx
+       01:62A5  69 00     	adc	HIGH_BYTE #TSENSOR_HEIGHT
+       01:62A7  85 FB     	sta	HIGH_BYTE <_bx
                           .endif
-  128                     	;place feet at bottom of block
-  129                     	andw <_ax,#$fff0
-       01:62DA  A5 F8     	lda	LOW_BYTE <_ax
-       01:62DC  29 F0     	and LOW_BYTE #$fff0
-       01:62DE  85 F8     	sta LOW_BYTE <_ax
-       01:62E0  A5 F9     	lda HIGH_BYTE <_ax
-       01:62E2  29 FF     	and HIGH_BYTE #$fff0
-       01:62E4  85 F9     	sta HIGH_BYTE <_ax
-  130                     	addw #16,<_ax
+  122  01:62A9  20 81 65  	jsr get_height
+  123  01:62AC  D0 54     	bne .hcollision_right
+  124                     	;bottom right
+  125                     	stw <player_x+1,<_ax
+       01:62AE  A5 12     	lda	LOW_BYTE <player_x+1
+       01:62B0  85 F8     	sta	LOW_BYTE <_ax
+       01:62B2  A5 13     	lda	HIGH_BYTE <player_x+1
+       01:62B4  85 F9     	sta	HIGH_BYTE <_ax
+  126                     	addw #PLAYER_WIDTH,<_ax
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
                           	;
-       01:62E6  18        	clc
-       01:62E7  A5 F8     	lda	LOW_BYTE <_ax
-       01:62E9  69 10     	adc	LOW_BYTE #16
-       01:62EB  85 F8     	sta	LOW_BYTE <_ax
-       01:62ED  A5 F9     	lda	HIGH_BYTE <_ax
-       01:62EF  69 00     	adc	HIGH_BYTE #16
-       01:62F1  85 F9     	sta	HIGH_BYTE <_ax
+       01:62B6  18        	clc
+       01:62B7  A5 F8     	lda	LOW_BYTE <_ax
+       01:62B9  69 10     	adc	LOW_BYTE #PLAYER_WIDTH
+       01:62BB  85 F8     	sta	LOW_BYTE <_ax
+       01:62BD  A5 F9     	lda	HIGH_BYTE <_ax
+       01:62BF  69 00     	adc	HIGH_BYTE #PLAYER_WIDTH
+       01:62C1  85 F9     	sta	HIGH_BYTE <_ax
                           .endif
-  131                     	;move up by highest sensor's height
-  132                     	subw <pad,<_ax
-       01:62F3  38        	sec
-       01:62F4  A5 F8     	lda	LOW_BYTE <_ax
-       01:62F6  E5 00     	sbc	LOW_BYTE <pad
-       01:62F8  85 F8     	sta	LOW_BYTE <_ax
-       01:62FA  A5 F9     	lda	HIGH_BYTE <_ax
-       01:62FC  E5 01     	sbc	HIGH_BYTE <pad
-       01:62FE  85 F9     	sta	HIGH_BYTE <_ax
-  133                     	;translate from foot pos to sprite pos
-  134                     	subw #PLAYER_HEIGHT,<_ax
-       01:6300  38        	sec
-       01:6301  A5 F8     	lda	LOW_BYTE <_ax
-       01:6303  E9 20     	sbc	LOW_BYTE #PLAYER_HEIGHT
-       01:6305  85 F8     	sta	LOW_BYTE <_ax
-       01:6307  A5 F9     	lda	HIGH_BYTE <_ax
-       01:6309  E9 00     	sbc	HIGH_BYTE #PLAYER_HEIGHT
-       01:630B  85 F9     	sta	HIGH_BYTE <_ax
-  135                     	stw <_ax,<player_y+1
-       01:630D  A5 F8     	lda	LOW_BYTE <_ax
-       01:630F  85 15     	sta	LOW_BYTE <player_y+1
-       01:6311  A5 F9     	lda	HIGH_BYTE <_ax
-       01:6313  85 16     	sta	HIGH_BYTE <player_y+1
-  136  01:6315            .done_ground:
-  137                     	
-  138                     ;-----done collision detection-----
-  139                     	stw <player_x+1,<scroll_x
-       01:6315  A5 12     	lda	LOW_BYTE <player_x+1
-       01:6317  85 08     	sta	LOW_BYTE <scroll_x
-       01:6319  A5 13     	lda	HIGH_BYTE <player_x+1
-       01:631B  85 09     	sta	HIGH_BYTE <scroll_x
-  140                     	subw #PLAYERSPR_X,<scroll_x
-       01:631D  38        	sec
-       01:631E  A5 08     	lda	LOW_BYTE <scroll_x
-       01:6320  E9 98     	sbc	LOW_BYTE #PLAYERSPR_X
-       01:6322  85 08     	sta	LOW_BYTE <scroll_x
-       01:6324  A5 09     	lda	HIGH_BYTE <scroll_x
-       01:6326  E9 00     	sbc	HIGH_BYTE #PLAYERSPR_X
-       01:6328  85 09     	sta	HIGH_BYTE <scroll_x
-  141                     	
-  142                     ;-----jumping & falling-----
-  143  01:632A  0F 0F 12  	bbr0 <joypad,.done_one
-  144  01:632D  A5 1B     	lda <player_state
-  145  01:632F  C9 01     	cmp #STATE_AIR
-  146  01:6331  F0 0C     	beq .done_one
-  147                     	stw #-($900),<player_dy
-       01:6333  A9 00     	lda	LOW_BYTE #-($900)
-       01:6335  85 19     	sta	LOW_BYTE <player_dy
-       01:6337  A9 F7     	lda	HIGH_BYTE #-($900)
-       01:6339  85 1A     	sta	HIGH_BYTE <player_dy
-  148  01:633B  A9 01     	lda #STATE_AIR
-  149  01:633D  85 1B     	sta <player_state
-  150  01:633F            .done_one:	
-  151                     	
-  152  01:633F  A5 1B     	lda <player_state
-  153  01:6341  C9 01     	cmp #STATE_AIR
-  154  01:6343  D0 5D     	bne .done_air
-  155                     	;jump higher if player's still holding I
-  156  01:6345  0F 0F 1B  	bbr0 <joypad,.normal_gravity
-  157                     	cmpw #$0,<player_dy
-       01:6348  A5 1A     	lda	HIGH_BYTE <player_dy
-       01:634A  C9 00     	cmp	HIGH_BYTE #$0
-       01:634C  D0 04     	bne	.x_00069
-       01:634E  A5 19     	lda	LOW_BYTE <player_dy
-       01:6350  C9 00     	cmp	LOW_BYTE #$0
-       01:6352            .x_00069:
-  158                     	; beq .normal_gravity
-  159  01:6352  10 0F     	bpl .normal_gravity
-  160                     	addw #$40,<player_dy
+  127                     	stw <player_y+1,<_bx
+       01:62C3  A5 15     	lda	LOW_BYTE <player_y+1
+       01:62C5  85 FA     	sta	LOW_BYTE <_bx
+       01:62C7  A5 16     	lda	HIGH_BYTE <player_y+1
+       01:62C9  85 FB     	sta	HIGH_BYTE <_bx
+  128                     	addw #BSENSOR_HEIGHT,<_bx
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
                           	;
-       01:6354  18        	clc
-       01:6355  A5 19     	lda	LOW_BYTE <player_dy
-       01:6357  69 40     	adc	LOW_BYTE #$40
-       01:6359  85 19     	sta	LOW_BYTE <player_dy
-       01:635B  A5 1A     	lda	HIGH_BYTE <player_dy
-       01:635D  69 00     	adc	HIGH_BYTE #$40
-       01:635F  85 1A     	sta	HIGH_BYTE <player_dy
+       01:62CB  18        	clc
+       01:62CC  A5 FA     	lda	LOW_BYTE <_bx
+       01:62CE  69 18     	adc	LOW_BYTE #BSENSOR_HEIGHT
+       01:62D0  85 FA     	sta	LOW_BYTE <_bx
+       01:62D2  A5 FB     	lda	HIGH_BYTE <_bx
+       01:62D4  69 00     	adc	HIGH_BYTE #BSENSOR_HEIGHT
+       01:62D6  85 FB     	sta	HIGH_BYTE <_bx
                           .endif
-  161  01:6361  80 0D     	bra .done_gravity
-  162                     	
-  163  01:6363            .normal_gravity:
-  164                     	addw #ACCEL,<player_dy
+  129  01:62D8  20 81 65  	jsr get_height
+  130  01:62DB  C9 10     	cmp #$10
+  131  01:62DD  F0 23     	beq .hcollision_right
+  132                     	
+  133  01:62DF  80 40     	bra .done_hcollision
+  134  01:62E1            .hcollision_left:
+  135                     	stwz <player_dx
+       01:62E1  64 17     	stz	LOW_BYTE <player_dx
+       01:62E3  64 18     	stz	HIGH_BYTE <player_dx
+  136                     	andw <player_x+1,#$fff0
+       01:62E5  A5 12     	lda	LOW_BYTE <player_x+1
+       01:62E7  29 F0     	and LOW_BYTE #$fff0
+       01:62E9  85 12     	sta LOW_BYTE <player_x+1
+       01:62EB  A5 13     	lda HIGH_BYTE <player_x+1
+       01:62ED  29 FF     	and HIGH_BYTE #$fff0
+       01:62EF  85 13     	sta HIGH_BYTE <player_x+1
+  137                     	addw #$10,<player_x+1
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
                           	;
-       01:6363  18        	clc
-       01:6364  A5 19     	lda	LOW_BYTE <player_dy
-       01:6366  69 80     	adc	LOW_BYTE #ACCEL
-       01:6368  85 19     	sta	LOW_BYTE <player_dy
-       01:636A  A5 1A     	lda	HIGH_BYTE <player_dy
-       01:636C  69 00     	adc	HIGH_BYTE #ACCEL
-       01:636E  85 1A     	sta	HIGH_BYTE <player_dy
+       01:62F1  18        	clc
+       01:62F2  A5 12     	lda	LOW_BYTE <player_x+1
+       01:62F4  69 10     	adc	LOW_BYTE #$10
+       01:62F6  85 12     	sta	LOW_BYTE <player_x+1
+       01:62F8  A5 13     	lda	HIGH_BYTE <player_x+1
+       01:62FA  69 00     	adc	HIGH_BYTE #$10
+       01:62FC  85 13     	sta	HIGH_BYTE <player_x+1
                           .endif
-  165  01:6370            .done_gravity:
-  166                     	;add dy to player_y
-  167  01:6370  A5 1A     	lda <player_dy+1
-  168  01:6372  29 80     	and #%10000000
-  169  01:6374  D0 17     	bne .negative_dy
-  170                     	;positive add
-  171                     	addw <player_dy,<player_y
+  138  01:62FE  64 11     	stz <player_x
+  139  01:6300  80 1F     	bra .done_hcollision
+  140  01:6302            .hcollision_right:
+  141                     	stwz <player_dx
+       01:6302  64 17     	stz	LOW_BYTE <player_dx
+       01:6304  64 18     	stz	HIGH_BYTE <player_dx
+  142                     	andw <player_x+1,#$fff0
+       01:6306  A5 12     	lda	LOW_BYTE <player_x+1
+       01:6308  29 F0     	and LOW_BYTE #$fff0
+       01:630A  85 12     	sta LOW_BYTE <player_x+1
+       01:630C  A5 13     	lda HIGH_BYTE <player_x+1
+       01:630E  29 FF     	and HIGH_BYTE #$fff0
+       01:6310  85 13     	sta HIGH_BYTE <player_x+1
+  143                     	decw <player_x+1
+       01:6312  38        	sec			; value at stated memory
+       01:6313  A5 12     	lda	<player_x+1		; location
+       01:6315  E9 01     	sbc	#1
+       01:6317  85 12     	sta	<player_x+1
+       01:6319  A5 13     	lda	<player_x+1+1
+       01:631B  E9 00     	sbc	#0
+       01:631D  85 13     	sta	<player_x+1+1
+  144  01:631F  64 11     	stz <player_x
+  145  01:6321            .done_hcollision:	
+  146                     ;-----jumping & falling-----
+  147  01:6321  0F 10 12  	bbr0 <joyedge,.done_one ;handle jump button press
+  148  01:6324  A5 1B     	lda <player_state
+  149  01:6326  C9 01     	cmp #STATE_AIR
+  150  01:6328  F0 0C     	beq .done_one
+  151                     	stw #-($900),<player_dy
+       01:632A  A9 00     	lda	LOW_BYTE #-($900)
+       01:632C  85 19     	sta	LOW_BYTE <player_dy
+       01:632E  A9 F7     	lda	HIGH_BYTE #-($900)
+       01:6330  85 1A     	sta	HIGH_BYTE <player_dy
+  152  01:6332  A9 01     	lda #STATE_AIR
+  153  01:6334  85 1B     	sta <player_state
+  154  01:6336            .done_one:	
+  155                     	
+  156  01:6336  A5 1B     	lda <player_state
+  157  01:6338  C9 01     	cmp #STATE_AIR
+  158  01:633A  D0 5D     	bne .done_air
+  159                     	;jump higher if player's still holding I
+  160  01:633C  0F 0F 1B  	bbr0 <joypad,.normal_gravity
+  161                     	cmpw #$0,<player_dy
+       01:633F  A5 1A     	lda	HIGH_BYTE <player_dy
+       01:6341  C9 00     	cmp	HIGH_BYTE #$0
+       01:6343  D0 04     	bne	.x_00067
+       01:6345  A5 19     	lda	LOW_BYTE <player_dy
+       01:6347  C9 00     	cmp	LOW_BYTE #$0
+       01:6349            .x_00067:
+  162  01:6349  10 0F     	bpl .normal_gravity
+  163                     	addw #JUMP_GRAVITY,<player_dy
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
                           	;
-       01:6376  18        	clc
-       01:6377  A5 14     	lda	LOW_BYTE <player_y
-       01:6379  65 19     	adc	LOW_BYTE <player_dy
-       01:637B  85 14     	sta	LOW_BYTE <player_y
-       01:637D  A5 15     	lda	HIGH_BYTE <player_y
-       01:637F  65 1A     	adc	HIGH_BYTE <player_dy
-       01:6381  85 15     	sta	HIGH_BYTE <player_y
+       01:634B  18        	clc
+       01:634C  A5 19     	lda	LOW_BYTE <player_dy
+       01:634E  69 70     	adc	LOW_BYTE #JUMP_GRAVITY
+       01:6350  85 19     	sta	LOW_BYTE <player_dy
+       01:6352  A5 1A     	lda	HIGH_BYTE <player_dy
+       01:6354  69 00     	adc	HIGH_BYTE #JUMP_GRAVITY
+       01:6356  85 1A     	sta	HIGH_BYTE <player_dy
                           .endif
-  172  01:6383  AD 16 20  	lda player_y+2
-  173  01:6386  69 00     	adc #$0
-  174  01:6388  8D 16 20  	sta player_y+2
-  175  01:638B  80 15     	bra .done_air
-  176  01:638D            .negative_dy:
-  177                     	addw <player_dy,<player_y
+  164  01:6358  80 0D     	bra .done_gravity
+  165                     	
+  166  01:635A            .normal_gravity:
+  167                     	addw #GRAVITY,<player_dy
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
                           	;
-       01:638D  18        	clc
-       01:638E  A5 14     	lda	LOW_BYTE <player_y
-       01:6390  65 19     	adc	LOW_BYTE <player_dy
-       01:6392  85 14     	sta	LOW_BYTE <player_y
-       01:6394  A5 15     	lda	HIGH_BYTE <player_y
-       01:6396  65 1A     	adc	HIGH_BYTE <player_dy
-       01:6398  85 15     	sta	HIGH_BYTE <player_y
+       01:635A  18        	clc
+       01:635B  A5 19     	lda	LOW_BYTE <player_dy
+       01:635D  69 A0     	adc	LOW_BYTE #GRAVITY
+       01:635F  85 19     	sta	LOW_BYTE <player_dy
+       01:6361  A5 1A     	lda	HIGH_BYTE <player_dy
+       01:6363  69 00     	adc	HIGH_BYTE #GRAVITY
+       01:6365  85 1A     	sta	HIGH_BYTE <player_dy
                           .endif
-  178  01:639A  AD 16 20  	lda player_y+2
-  179  01:639D  69 FF     	adc #$ff
-  180  01:639F  8D 16 20  	sta player_y+2
-  181  01:63A2            .done_air:
-  182                     	stw <player_y+1,<scroll_y
-       01:63A2  A5 15     	lda	LOW_BYTE <player_y+1
-       01:63A4  85 0A     	sta	LOW_BYTE <scroll_y
-       01:63A6  A5 16     	lda	HIGH_BYTE <player_y+1
-       01:63A8  85 0B     	sta	HIGH_BYTE <scroll_y
-  183                     	subw #PLAYERSPR_Y,<scroll_y
-       01:63AA  38        	sec
-       01:63AB  A5 0A     	lda	LOW_BYTE <scroll_y
-       01:63AD  E9 A0     	sbc	LOW_BYTE #PLAYERSPR_Y
-       01:63AF  85 0A     	sta	LOW_BYTE <scroll_y
-       01:63B1  A5 0B     	lda	HIGH_BYTE <scroll_y
-       01:63B3  E9 00     	sbc	HIGH_BYTE #PLAYERSPR_Y
-       01:63B5  85 0B     	sta	HIGH_BYTE <scroll_y
-  184  01:63B7  60        	rts
+  168  01:6367            .done_gravity:
+  169                     	;add dy to player_y
+  170  01:6367  A5 1A     	lda <player_dy+1
+  171  01:6369  29 80     	and #%10000000
+  172  01:636B  D0 17     	bne .negative_dy
+  173                     	;positive add
+  174                     	addw <player_dy,<player_y
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:636D  18        	clc
+       01:636E  A5 14     	lda	LOW_BYTE <player_y
+       01:6370  65 19     	adc	LOW_BYTE <player_dy
+       01:6372  85 14     	sta	LOW_BYTE <player_y
+       01:6374  A5 15     	lda	HIGH_BYTE <player_y
+       01:6376  65 1A     	adc	HIGH_BYTE <player_dy
+       01:6378  85 15     	sta	HIGH_BYTE <player_y
+                          .endif
+  175  01:637A  AD 16 20  	lda player_y+2
+  176  01:637D  69 00     	adc #$0
+  177  01:637F  8D 16 20  	sta player_y+2
+  178  01:6382  80 15     	bra .done_air
+  179  01:6384            .negative_dy:
+  180                     	addw <player_dy,<player_y
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:6384  18        	clc
+       01:6385  A5 14     	lda	LOW_BYTE <player_y
+       01:6387  65 19     	adc	LOW_BYTE <player_dy
+       01:6389  85 14     	sta	LOW_BYTE <player_y
+       01:638B  A5 15     	lda	HIGH_BYTE <player_y
+       01:638D  65 1A     	adc	HIGH_BYTE <player_dy
+       01:638F  85 15     	sta	HIGH_BYTE <player_y
+                          .endif
+  181  01:6391  AD 16 20  	lda player_y+2
+  182  01:6394  69 FF     	adc #$ff
+  183  01:6396  8D 16 20  	sta player_y+2
+  184  01:6399            .done_air:
   185                     	
-  186                     ;returns number of pixels to move up/down in dx
-  187                     ;ax: foot x pos
-  188                     ;bx: foot y pos
-  189  01:63B8            get_sensor:
-  190                     	stw <_ax,<_si
-       01:63B8  A5 F8     	lda	LOW_BYTE <_ax
-       01:63BA  85 EE     	sta	LOW_BYTE <_si
-       01:63BC  A5 F9     	lda	HIGH_BYTE <_ax
-       01:63BE  85 EF     	sta	HIGH_BYTE <_si
-  191                     	stw <_bx,<_di
-       01:63C0  A5 FA     	lda	LOW_BYTE <_bx
-       01:63C2  85 F0     	sta	LOW_BYTE <_di
-       01:63C4  A5 FB     	lda	HIGH_BYTE <_bx
-       01:63C6  85 F1     	sta	HIGH_BYTE <_di
-  192  01:63C8  20 38 64  	jsr get_height
-  193  01:63CB  85 FE     	sta <_dl
-  194  01:63CD  64 FF     	stz <_dh
-  195                     	;if height is 0, check below block
-  196  01:63CF  F0 06     	beq .check_below
-  197  01:63D1  C9 10     	cmp #16
-  198                     	;if height is 16, check above block
-  199  01:63D3  F0 33     	beq .check_above
-  200                     	;otherwise end
-  201  01:63D5  80 60     	bra .end
-  202  01:63D7            .check_below:
-  203                     	;add 16 to height (below tile)
-  204                     	stw <_si,<_ax
-       01:63D7  A5 EE     	lda	LOW_BYTE <_si
-       01:63D9  85 F8     	sta	LOW_BYTE <_ax
-       01:63DB  A5 EF     	lda	HIGH_BYTE <_si
-       01:63DD  85 F9     	sta	HIGH_BYTE <_ax
-  205                     	stw <_di,<_bx
-       01:63DF  A5 F0     	lda	LOW_BYTE <_di
-       01:63E1  85 FA     	sta	LOW_BYTE <_bx
-       01:63E3  A5 F1     	lda	HIGH_BYTE <_di
-       01:63E5  85 FB     	sta	HIGH_BYTE <_bx
-  206                     	addw #16,<_bx
+  186                     ;-----collision detection-----
+  187                     	cmpw #$0,<player_dy ;don't check for ground collision if moving upwards
+       01:6399  A5 1A     	lda	HIGH_BYTE <player_dy
+       01:639B  C9 00     	cmp	HIGH_BYTE #$0
+       01:639D  D0 04     	bne	.x_00072
+       01:639F  A5 19     	lda	LOW_BYTE <player_dy
+       01:63A1  C9 00     	cmp	LOW_BYTE #$0
+       01:63A3            .x_00072:
+  188  01:63A3  10 05     	bpl .floor_collision
+  189  01:63A5  F0 03     	beq .floor_collision
+  190  01:63A7  4C 80 64  	jmp .ceil_collision
+  191                     	
+  192  01:63AA            .floor_collision:
+  193                     ;check left foot
+  194                     	stw <player_x+1,<_ax
+       01:63AA  A5 12     	lda	LOW_BYTE <player_x+1
+       01:63AC  85 F8     	sta	LOW_BYTE <_ax
+       01:63AE  A5 13     	lda	HIGH_BYTE <player_x+1
+       01:63B0  85 F9     	sta	HIGH_BYTE <_ax
+  195                     	stw <player_y+1,<_bx
+       01:63B2  A5 15     	lda	LOW_BYTE <player_y+1
+       01:63B4  85 FA     	sta	LOW_BYTE <_bx
+       01:63B6  A5 16     	lda	HIGH_BYTE <player_y+1
+       01:63B8  85 FB     	sta	HIGH_BYTE <_bx
+  196                     	addw #PLAYER_HEIGHT,<_bx
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
                           	;
-       01:63E7  18        	clc
-       01:63E8  A5 FA     	lda	LOW_BYTE <_bx
-       01:63EA  69 10     	adc	LOW_BYTE #16
-       01:63EC  85 FA     	sta	LOW_BYTE <_bx
-       01:63EE  A5 FB     	lda	HIGH_BYTE <_bx
-       01:63F0  69 00     	adc	HIGH_BYTE #16
-       01:63F2  85 FB     	sta	HIGH_BYTE <_bx
+       01:63BA  18        	clc
+       01:63BB  A5 FA     	lda	LOW_BYTE <_bx
+       01:63BD  69 20     	adc	LOW_BYTE #PLAYER_HEIGHT
+       01:63BF  85 FA     	sta	LOW_BYTE <_bx
+       01:63C1  A5 FB     	lda	HIGH_BYTE <_bx
+       01:63C3  69 00     	adc	HIGH_BYTE #PLAYER_HEIGHT
+       01:63C5  85 FB     	sta	HIGH_BYTE <_bx
                           .endif
-  207  01:63F4  20 38 64  	jsr get_height
-  208  01:63F7  85 FE     	sta <_dl
-  209                     	;we have to remove 16px from the height
-  210                     	subw #16,<_dx
-       01:63F9  38        	sec
-       01:63FA  A5 FE     	lda	LOW_BYTE <_dx
-       01:63FC  E9 10     	sbc	LOW_BYTE #16
-       01:63FE  85 FE     	sta	LOW_BYTE <_dx
-       01:6400  A5 FF     	lda	HIGH_BYTE <_dx
-       01:6402  E9 00     	sbc	HIGH_BYTE #16
-       01:6404  85 FF     	sta	HIGH_BYTE <_dx
-  211  01:6406  80 2F     	bra .end
-  212  01:6408            .check_above:
-  213                     	;subtract 16 from height (above tile)
-  214                     	stw <_si,<_ax
-       01:6408  A5 EE     	lda	LOW_BYTE <_si
-       01:640A  85 F8     	sta	LOW_BYTE <_ax
-       01:640C  A5 EF     	lda	HIGH_BYTE <_si
-       01:640E  85 F9     	sta	HIGH_BYTE <_ax
-  215                     	stw <_di,<_bx
-       01:6410  A5 F0     	lda	LOW_BYTE <_di
-       01:6412  85 FA     	sta	LOW_BYTE <_bx
-       01:6414  A5 F1     	lda	HIGH_BYTE <_di
-       01:6416  85 FB     	sta	HIGH_BYTE <_bx
-  216                     	subw #16,<_bx
-       01:6418  38        	sec
-       01:6419  A5 FA     	lda	LOW_BYTE <_bx
-       01:641B  E9 10     	sbc	LOW_BYTE #16
-       01:641D  85 FA     	sta	LOW_BYTE <_bx
-       01:641F  A5 FB     	lda	HIGH_BYTE <_bx
-       01:6421  E9 00     	sbc	HIGH_BYTE #16
-       01:6423  85 FB     	sta	HIGH_BYTE <_bx
-  217  01:6425  20 38 64  	jsr get_height
-  218  01:6428  85 FE     	sta <_dl
-  219                     	;we have to add 16px to the height
-  220                     	addw #16,<_dx
+  197  01:63C7  20 01 65  	jsr get_sensor
+  198                     	stw <_dx,<pad
+       01:63CA  A5 FE     	lda	LOW_BYTE <_dx
+       01:63CC  85 00     	sta	LOW_BYTE <pad
+       01:63CE  A5 FF     	lda	HIGH_BYTE <_dx
+       01:63D0  85 01     	sta	HIGH_BYTE <pad
+  199                     ;check right foot
+  200                     	stw <player_x+1,<_ax
+       01:63D2  A5 12     	lda	LOW_BYTE <player_x+1
+       01:63D4  85 F8     	sta	LOW_BYTE <_ax
+       01:63D6  A5 13     	lda	HIGH_BYTE <player_x+1
+       01:63D8  85 F9     	sta	HIGH_BYTE <_ax
+  201                     	addw #PLAYER_WIDTH,<_ax
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
                           	;
-       01:642A  18        	clc
-       01:642B  A5 FE     	lda	LOW_BYTE <_dx
-       01:642D  69 10     	adc	LOW_BYTE #16
-       01:642F  85 FE     	sta	LOW_BYTE <_dx
-       01:6431  A5 FF     	lda	HIGH_BYTE <_dx
-       01:6433  69 00     	adc	HIGH_BYTE #16
-       01:6435  85 FF     	sta	HIGH_BYTE <_dx
+       01:63DA  18        	clc
+       01:63DB  A5 F8     	lda	LOW_BYTE <_ax
+       01:63DD  69 10     	adc	LOW_BYTE #PLAYER_WIDTH
+       01:63DF  85 F8     	sta	LOW_BYTE <_ax
+       01:63E1  A5 F9     	lda	HIGH_BYTE <_ax
+       01:63E3  69 00     	adc	HIGH_BYTE #PLAYER_WIDTH
+       01:63E5  85 F9     	sta	HIGH_BYTE <_ax
                           .endif
-  221  01:6437            .end:
-  222  01:6437  60        	rts
-  223                     
-  224                     
-  225                     ;returns height of current tile in al
-  226                     ;ax: x pos (pixels)
-  227                     ;bx: y pos (pixels)	
-  228  01:6438            get_height:
-  229                     ;tile offset = ((y >> 4) << 6) + (x >> 4) << 1
-  230                     ;            = ((y & #$fff0) << 2) + (x >> 3) & #$fffe
-  231                     	;pc engine adds 32 to sprite x positions and 64 to sprite y positions
-  232                     	;so origin is 32 pixels left of screen and 64 above
-  233                     	subw #32,<_ax
-       01:6438  38        	sec
-       01:6439  A5 F8     	lda	LOW_BYTE <_ax
-       01:643B  E9 20     	sbc	LOW_BYTE #32
-       01:643D  85 F8     	sta	LOW_BYTE <_ax
-       01:643F  A5 F9     	lda	HIGH_BYTE <_ax
-       01:6441  E9 00     	sbc	HIGH_BYTE #32
-       01:6443  85 F9     	sta	HIGH_BYTE <_ax
-  234                     	subw #64,<_bx
-       01:6445  38        	sec
-       01:6446  A5 FA     	lda	LOW_BYTE <_bx
-       01:6448  E9 40     	sbc	LOW_BYTE #64
-       01:644A  85 FA     	sta	LOW_BYTE <_bx
-       01:644C  A5 FB     	lda	HIGH_BYTE <_bx
-       01:644E  E9 00     	sbc	HIGH_BYTE #64
-       01:6450  85 FB     	sta	HIGH_BYTE <_bx
-  235                     	andw <_bx,#$fff0
-       01:6452  A5 FA     	lda	LOW_BYTE <_bx
-       01:6454  29 F0     	and LOW_BYTE #$fff0
-       01:6456  85 FA     	sta LOW_BYTE <_bx
-       01:6458  A5 FB     	lda HIGH_BYTE <_bx
-       01:645A  29 FF     	and HIGH_BYTE #$fff0
-       01:645C  85 FB     	sta HIGH_BYTE <_bx
-  236                     	aslw <_bx
-       01:645E  06 FA     	asl	<_bx		; word-sized value (at stated
-       01:6460  26 FB     	rol	<_bx+1		; memory location)
-  237                     	aslw <_bx
-       01:6462  06 FA     	asl	<_bx		; word-sized value (at stated
-       01:6464  26 FB     	rol	<_bx+1		; memory location)
-  238                     	stw <_ax,<_cx
-       01:6466  A5 F8     	lda	LOW_BYTE <_ax
-       01:6468  85 FC     	sta	LOW_BYTE <_cx
-       01:646A  A5 F9     	lda	HIGH_BYTE <_ax
-       01:646C  85 FD     	sta	HIGH_BYTE <_cx
-  239                     	lsrw <_cx
-       01:646E  46 FD     	lsr	<_cx+1		; value (at stated memory
-       01:6470  66 FC     	ror	<_cx		; location)
-  240                     	lsrw <_cx
-       01:6472  46 FD     	lsr	<_cx+1		; value (at stated memory
-       01:6474  66 FC     	ror	<_cx		; location)
-  241                     	lsrw <_cx
-       01:6476  46 FD     	lsr	<_cx+1		; value (at stated memory
-       01:6478  66 FC     	ror	<_cx		; location)
-  242                     	andw <_cx,#$fffe
-       01:647A  A5 FC     	lda	LOW_BYTE <_cx
-       01:647C  29 FE     	and LOW_BYTE #$fffe
-       01:647E  85 FC     	sta LOW_BYTE <_cx
-       01:6480  A5 FD     	lda HIGH_BYTE <_cx
-       01:6482  29 FF     	and HIGH_BYTE #$fffe
-       01:6484  85 FD     	sta HIGH_BYTE <_cx
-  243                     	addw <_cx,<_bx
+  202                     	stw <player_y+1,<_bx
+       01:63E7  A5 15     	lda	LOW_BYTE <player_y+1
+       01:63E9  85 FA     	sta	LOW_BYTE <_bx
+       01:63EB  A5 16     	lda	HIGH_BYTE <player_y+1
+       01:63ED  85 FB     	sta	HIGH_BYTE <_bx
+  203                     	addw #PLAYER_HEIGHT,<_bx
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
                           	;
-       01:6486  18        	clc
-       01:6487  A5 FA     	lda	LOW_BYTE <_bx
-       01:6489  65 FC     	adc	LOW_BYTE <_cx
-       01:648B  85 FA     	sta	LOW_BYTE <_bx
-       01:648D  A5 FB     	lda	HIGH_BYTE <_bx
-       01:648F  65 FD     	adc	HIGH_BYTE <_cx
-       01:6491  85 FB     	sta	HIGH_BYTE <_bx
+       01:63EF  18        	clc
+       01:63F0  A5 FA     	lda	LOW_BYTE <_bx
+       01:63F2  69 20     	adc	LOW_BYTE #PLAYER_HEIGHT
+       01:63F4  85 FA     	sta	LOW_BYTE <_bx
+       01:63F6  A5 FB     	lda	HIGH_BYTE <_bx
+       01:63F8  69 00     	adc	HIGH_BYTE #PLAYER_HEIGHT
+       01:63FA  85 FB     	sta	HIGH_BYTE <_bx
                           .endif
-  244                     	addw #map_load,<_bx
+  204  01:63FC  20 01 65  	jsr get_sensor
+  205                     	cmpw <pad,<_dx
+       01:63FF  A5 FF     	lda	HIGH_BYTE <_dx
+       01:6401  C5 01     	cmp	HIGH_BYTE <pad
+       01:6403  D0 04     	bne	.x_00081
+       01:6405  A5 FE     	lda	LOW_BYTE <_dx
+       01:6407  C5 00     	cmp	LOW_BYTE <pad
+       01:6409            .x_00081:
+  206  01:6409  30 08     	bmi .left_higher
+  207                     	stw <_dx,<pad
+       01:640B  A5 FE     	lda	LOW_BYTE <_dx
+       01:640D  85 00     	sta	LOW_BYTE <pad
+       01:640F  A5 FF     	lda	HIGH_BYTE <_dx
+       01:6411  85 01     	sta	HIGH_BYTE <pad
+  208  01:6413            .left_higher:
+  209                     	cmpw #$fff0,<pad ;-16 is the value returned if no ground is found
+       01:6413  A5 01     	lda	HIGH_BYTE <pad
+       01:6415  C9 FF     	cmp	HIGH_BYTE #$fff0
+       01:6417  D0 04     	bne	.x_00083
+       01:6419  A5 00     	lda	LOW_BYTE <pad
+       01:641B  C9 F0     	cmp	LOW_BYTE #$fff0
+       01:641D            .x_00083:
+  210  01:641D  D0 07     	bne .on_ground 
+  211  01:641F  A9 01     	lda #STATE_AIR
+  212  01:6421  85 1B     	sta <player_state
+  213  01:6423  4C D6 64  	jmp .done_ground
+  214  01:6426            .on_ground:
+  215  01:6426  A9 00     	lda #STATE_GROUND
+  216  01:6428  85 1B     	sta <player_state
+  217                     	stwz <player_dy
+       01:642A  64 19     	stz	LOW_BYTE <player_dy
+       01:642C  64 1A     	stz	HIGH_BYTE <player_dy
+  218                     	;foot pos in ax
+  219                     	stw <player_y+1,<_ax
+       01:642E  A5 15     	lda	LOW_BYTE <player_y+1
+       01:6430  85 F8     	sta	LOW_BYTE <_ax
+       01:6432  A5 16     	lda	HIGH_BYTE <player_y+1
+       01:6434  85 F9     	sta	HIGH_BYTE <_ax
+  220                     	addw #PLAYER_HEIGHT,<_ax
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
                           	;
-       01:6493  18        	clc
-       01:6494  A5 FA     	lda	LOW_BYTE <_bx
-       01:6496  69 60     	adc	LOW_BYTE #map_load
-       01:6498  85 FA     	sta	LOW_BYTE <_bx
-       01:649A  A5 FB     	lda	HIGH_BYTE <_bx
-       01:649C  69 A0     	adc	HIGH_BYTE #map_load
-       01:649E  85 FB     	sta	HIGH_BYTE <_bx
+       01:6436  18        	clc
+       01:6437  A5 F8     	lda	LOW_BYTE <_ax
+       01:6439  69 20     	adc	LOW_BYTE #PLAYER_HEIGHT
+       01:643B  85 F8     	sta	LOW_BYTE <_ax
+       01:643D  A5 F9     	lda	HIGH_BYTE <_ax
+       01:643F  69 00     	adc	HIGH_BYTE #PLAYER_HEIGHT
+       01:6441  85 F9     	sta	HIGH_BYTE <_ax
                           .endif
-  245                     	;<_bx is the pointer to the tile
-  246  01:64A0  B2 FA     	lda [<_bx]
-  247  01:64A2  AA        	tax
-  248                     	;get height array index for the tile
-  249  01:64A3  BD 20 A0  	lda heights_load,x
-  250  01:64A6  85 FA     	sta <_bl
-  251  01:64A8  64 FB     	stz <_bh
-  252                     	;each height array is 16 bytes, so shift left by 4 to get the offset
-  253                     	aslw <_bx
-       01:64AA  06 FA     	asl	<_bx		; word-sized value (at stated
-       01:64AC  26 FB     	rol	<_bx+1		; memory location)
-  254                     	aslw <_bx
-       01:64AE  06 FA     	asl	<_bx		; word-sized value (at stated
-       01:64B0  26 FB     	rol	<_bx+1		; memory location)
-  255                     	aslw <_bx
-       01:64B2  06 FA     	asl	<_bx		; word-sized value (at stated
-       01:64B4  26 FB     	rol	<_bx+1		; memory location)
-  256                     	aslw <_bx
-       01:64B6  06 FA     	asl	<_bx		; word-sized value (at stated
-       01:64B8  26 FB     	rol	<_bx+1		; memory location)
-  257                     	addw #block_arrs,<_bx
+  221                     	;place feet at bottom of block
+  222                     	andw <_ax,#$fff0
+       01:6443  A5 F8     	lda	LOW_BYTE <_ax
+       01:6445  29 F0     	and LOW_BYTE #$fff0
+       01:6447  85 F8     	sta LOW_BYTE <_ax
+       01:6449  A5 F9     	lda HIGH_BYTE <_ax
+       01:644B  29 FF     	and HIGH_BYTE #$fff0
+       01:644D  85 F9     	sta HIGH_BYTE <_ax
+  223                     	addw #16,<_ax
                 0000      .if	(2 = 3)
                           .else
                           	; 2-arg mode
                           	;
-       01:64BA  18        	clc
-       01:64BB  A5 FA     	lda	LOW_BYTE <_bx
-       01:64BD  69 47     	adc	LOW_BYTE #block_arrs
-       01:64BF  85 FA     	sta	LOW_BYTE <_bx
-       01:64C1  A5 FB     	lda	HIGH_BYTE <_bx
-       01:64C3  69 42     	adc	HIGH_BYTE #block_arrs
-       01:64C5  85 FB     	sta	HIGH_BYTE <_bx
+       01:644F  18        	clc
+       01:6450  A5 F8     	lda	LOW_BYTE <_ax
+       01:6452  69 10     	adc	LOW_BYTE #16
+       01:6454  85 F8     	sta	LOW_BYTE <_ax
+       01:6456  A5 F9     	lda	HIGH_BYTE <_ax
+       01:6458  69 00     	adc	HIGH_BYTE #16
+       01:645A  85 F9     	sta	HIGH_BYTE <_ax
                           .endif
-  258                     	;get offset within the tile
-  259  01:64C7  A5 F8     	lda <_al
-  260  01:64C9  29 0F     	and #$f
-  261  01:64CB  A8        	tay
-  262  01:64CC  B1 FA     	lda [<_bx],y
-  263  01:64CE  85 F8     	sta <_al
-  264  01:64D0  60        	rts
-  265                     	
-  266                     	
+  224                     	;move up by highest sensor's height
+  225                     	subw <pad,<_ax
+       01:645C  38        	sec
+       01:645D  A5 F8     	lda	LOW_BYTE <_ax
+       01:645F  E5 00     	sbc	LOW_BYTE <pad
+       01:6461  85 F8     	sta	LOW_BYTE <_ax
+       01:6463  A5 F9     	lda	HIGH_BYTE <_ax
+       01:6465  E5 01     	sbc	HIGH_BYTE <pad
+       01:6467  85 F9     	sta	HIGH_BYTE <_ax
+  226                     	;translate from foot pos to sprite pos
+  227                     	subw #PLAYER_HEIGHT,<_ax
+       01:6469  38        	sec
+       01:646A  A5 F8     	lda	LOW_BYTE <_ax
+       01:646C  E9 20     	sbc	LOW_BYTE #PLAYER_HEIGHT
+       01:646E  85 F8     	sta	LOW_BYTE <_ax
+       01:6470  A5 F9     	lda	HIGH_BYTE <_ax
+       01:6472  E9 00     	sbc	HIGH_BYTE #PLAYER_HEIGHT
+       01:6474  85 F9     	sta	HIGH_BYTE <_ax
+  228                     	stw <_ax,<player_y+1
+       01:6476  A5 F8     	lda	LOW_BYTE <_ax
+       01:6478  85 15     	sta	LOW_BYTE <player_y+1
+       01:647A  A5 F9     	lda	HIGH_BYTE <_ax
+       01:647C  85 16     	sta	HIGH_BYTE <player_y+1
+  229  01:647E  80 56     	bra .done_ground
+  230  01:6480            .ceil_collision:
+  231                     	;top left
+  232                     	stw <player_x+1,<_ax
+       01:6480  A5 12     	lda	LOW_BYTE <player_x+1
+       01:6482  85 F8     	sta	LOW_BYTE <_ax
+       01:6484  A5 13     	lda	HIGH_BYTE <player_x+1
+       01:6486  85 F9     	sta	HIGH_BYTE <_ax
+  233                     	stw <player_y+1,<_bx
+       01:6488  A5 15     	lda	LOW_BYTE <player_y+1
+       01:648A  85 FA     	sta	LOW_BYTE <_bx
+       01:648C  A5 16     	lda	HIGH_BYTE <player_y+1
+       01:648E  85 FB     	sta	HIGH_BYTE <_bx
+  234  01:6490  20 81 65  	jsr get_height
+  235  01:6493  D0 22     	bne .ceil_rebound
+  236                     	;top right
+  237                     	stw <player_x+1,<_ax
+       01:6495  A5 12     	lda	LOW_BYTE <player_x+1
+       01:6497  85 F8     	sta	LOW_BYTE <_ax
+       01:6499  A5 13     	lda	HIGH_BYTE <player_x+1
+       01:649B  85 F9     	sta	HIGH_BYTE <_ax
+  238                     	addw #PLAYER_WIDTH,<_ax	
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:649D  18        	clc
+       01:649E  A5 F8     	lda	LOW_BYTE <_ax	
+       01:64A0  69 10     	adc	LOW_BYTE #PLAYER_WIDTH
+       01:64A2  85 F8     	sta	LOW_BYTE <_ax	
+       01:64A4  A5 F9     	lda	HIGH_BYTE <_ax	
+       01:64A6  69 00     	adc	HIGH_BYTE #PLAYER_WIDTH
+       01:64A8  85 F9     	sta	HIGH_BYTE <_ax	
+                          .endif
+  239                     	stw <player_y+1,<_bx
+       01:64AA  A5 15     	lda	LOW_BYTE <player_y+1
+       01:64AC  85 FA     	sta	LOW_BYTE <_bx
+       01:64AE  A5 16     	lda	HIGH_BYTE <player_y+1
+       01:64B0  85 FB     	sta	HIGH_BYTE <_bx
+  240  01:64B2  20 81 65  	jsr get_height
+  241  01:64B5  F0 1F     	beq .done_ground
+  242  01:64B7            .ceil_rebound:
+  243                     	stwz <player_dy
+       01:64B7  64 19     	stz	LOW_BYTE <player_dy
+       01:64B9  64 1A     	stz	HIGH_BYTE <player_dy
+  244                     	andw <player_y+1,#$fff0
+       01:64BB  A5 15     	lda	LOW_BYTE <player_y+1
+       01:64BD  29 F0     	and LOW_BYTE #$fff0
+       01:64BF  85 15     	sta LOW_BYTE <player_y+1
+       01:64C1  A5 16     	lda HIGH_BYTE <player_y+1
+       01:64C3  29 FF     	and HIGH_BYTE #$fff0
+       01:64C5  85 16     	sta HIGH_BYTE <player_y+1
+  245                     	addw #$10,<player_y+1
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:64C7  18        	clc
+       01:64C8  A5 15     	lda	LOW_BYTE <player_y+1
+       01:64CA  69 10     	adc	LOW_BYTE #$10
+       01:64CC  85 15     	sta	LOW_BYTE <player_y+1
+       01:64CE  A5 16     	lda	HIGH_BYTE <player_y+1
+       01:64D0  69 00     	adc	HIGH_BYTE #$10
+       01:64D2  85 16     	sta	HIGH_BYTE <player_y+1
+                          .endif
+  246  01:64D4  64 14     	stz <player_y
+  247  01:64D6            .done_ground:
+  248                     	
+  249                     ;-----done collision detection-----
+  250                     	stw <player_x+1,<scroll_x
+       01:64D6  A5 12     	lda	LOW_BYTE <player_x+1
+       01:64D8  85 08     	sta	LOW_BYTE <scroll_x
+       01:64DA  A5 13     	lda	HIGH_BYTE <player_x+1
+       01:64DC  85 09     	sta	HIGH_BYTE <scroll_x
+  251                     	subw #PLAYERSPR_X,<scroll_x	
+       01:64DE  38        	sec
+       01:64DF  A5 08     	lda	LOW_BYTE <scroll_x	
+       01:64E1  E9 98     	sbc	LOW_BYTE #PLAYERSPR_X
+       01:64E3  85 08     	sta	LOW_BYTE <scroll_x	
+       01:64E5  A5 09     	lda	HIGH_BYTE <scroll_x	
+       01:64E7  E9 00     	sbc	HIGH_BYTE #PLAYERSPR_X
+       01:64E9  85 09     	sta	HIGH_BYTE <scroll_x	
+  252                     	stw <player_y+1,<scroll_y
+       01:64EB  A5 15     	lda	LOW_BYTE <player_y+1
+       01:64ED  85 0A     	sta	LOW_BYTE <scroll_y
+       01:64EF  A5 16     	lda	HIGH_BYTE <player_y+1
+       01:64F1  85 0B     	sta	HIGH_BYTE <scroll_y
+  253                     	subw #PLAYERSPR_Y,<scroll_y	
+       01:64F3  38        	sec
+       01:64F4  A5 0A     	lda	LOW_BYTE <scroll_y	
+       01:64F6  E9 A0     	sbc	LOW_BYTE #PLAYERSPR_Y
+       01:64F8  85 0A     	sta	LOW_BYTE <scroll_y	
+       01:64FA  A5 0B     	lda	HIGH_BYTE <scroll_y	
+       01:64FC  E9 00     	sbc	HIGH_BYTE #PLAYERSPR_Y
+       01:64FE  85 0B     	sta	HIGH_BYTE <scroll_y	
+  254  01:6500  60        	rts
+  255                     	
+  256                     ;returns number of pixels to move up/down in dx
+  257                     ;ax: foot x pos
+  258                     ;bx: foot y pos
+  259  01:6501            get_sensor:
+  260                     	stw <_ax,<_si
+       01:6501  A5 F8     	lda	LOW_BYTE <_ax
+       01:6503  85 EE     	sta	LOW_BYTE <_si
+       01:6505  A5 F9     	lda	HIGH_BYTE <_ax
+       01:6507  85 EF     	sta	HIGH_BYTE <_si
+  261                     	stw <_bx,<_di
+       01:6509  A5 FA     	lda	LOW_BYTE <_bx
+       01:650B  85 F0     	sta	LOW_BYTE <_di
+       01:650D  A5 FB     	lda	HIGH_BYTE <_bx
+       01:650F  85 F1     	sta	HIGH_BYTE <_di
+  262  01:6511  20 81 65  	jsr get_height
+  263  01:6514  85 FE     	sta <_dl
+  264  01:6516  64 FF     	stz <_dh
+  265                     	;if height is 0, check below block
+  266  01:6518  F0 06     	beq .check_below
+  267  01:651A  C9 10     	cmp #16
+  268                     	;if height is 16, check above block
+  269  01:651C  F0 33     	beq .check_above
+  270                     	;otherwise end
+  271  01:651E  80 60     	bra .end
+  272  01:6520            .check_below:
+  273                     	;add 16 to height (below tile)
+  274                     	stw <_si,<_ax
+       01:6520  A5 EE     	lda	LOW_BYTE <_si
+       01:6522  85 F8     	sta	LOW_BYTE <_ax
+       01:6524  A5 EF     	lda	HIGH_BYTE <_si
+       01:6526  85 F9     	sta	HIGH_BYTE <_ax
+  275                     	stw <_di,<_bx
+       01:6528  A5 F0     	lda	LOW_BYTE <_di
+       01:652A  85 FA     	sta	LOW_BYTE <_bx
+       01:652C  A5 F1     	lda	HIGH_BYTE <_di
+       01:652E  85 FB     	sta	HIGH_BYTE <_bx
+  276                     	addw #16,<_bx
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:6530  18        	clc
+       01:6531  A5 FA     	lda	LOW_BYTE <_bx
+       01:6533  69 10     	adc	LOW_BYTE #16
+       01:6535  85 FA     	sta	LOW_BYTE <_bx
+       01:6537  A5 FB     	lda	HIGH_BYTE <_bx
+       01:6539  69 00     	adc	HIGH_BYTE #16
+       01:653B  85 FB     	sta	HIGH_BYTE <_bx
+                          .endif
+  277  01:653D  20 81 65  	jsr get_height
+  278  01:6540  85 FE     	sta <_dl
+  279                     	;we have to remove 16px from the height
+  280                     	subw #16,<_dx
+       01:6542  38        	sec
+       01:6543  A5 FE     	lda	LOW_BYTE <_dx
+       01:6545  E9 10     	sbc	LOW_BYTE #16
+       01:6547  85 FE     	sta	LOW_BYTE <_dx
+       01:6549  A5 FF     	lda	HIGH_BYTE <_dx
+       01:654B  E9 00     	sbc	HIGH_BYTE #16
+       01:654D  85 FF     	sta	HIGH_BYTE <_dx
+  281  01:654F  80 2F     	bra .end
+  282  01:6551            .check_above:
+  283                     	;subtract 16 from height (above tile)
+  284                     	stw <_si,<_ax
+       01:6551  A5 EE     	lda	LOW_BYTE <_si
+       01:6553  85 F8     	sta	LOW_BYTE <_ax
+       01:6555  A5 EF     	lda	HIGH_BYTE <_si
+       01:6557  85 F9     	sta	HIGH_BYTE <_ax
+  285                     	stw <_di,<_bx
+       01:6559  A5 F0     	lda	LOW_BYTE <_di
+       01:655B  85 FA     	sta	LOW_BYTE <_bx
+       01:655D  A5 F1     	lda	HIGH_BYTE <_di
+       01:655F  85 FB     	sta	HIGH_BYTE <_bx
+  286                     	subw #16,<_bx
+       01:6561  38        	sec
+       01:6562  A5 FA     	lda	LOW_BYTE <_bx
+       01:6564  E9 10     	sbc	LOW_BYTE #16
+       01:6566  85 FA     	sta	LOW_BYTE <_bx
+       01:6568  A5 FB     	lda	HIGH_BYTE <_bx
+       01:656A  E9 00     	sbc	HIGH_BYTE #16
+       01:656C  85 FB     	sta	HIGH_BYTE <_bx
+  287  01:656E  20 81 65  	jsr get_height
+  288  01:6571  85 FE     	sta <_dl
+  289                     	;we have to add 16px to the height
+  290                     	addw #16,<_dx
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:6573  18        	clc
+       01:6574  A5 FE     	lda	LOW_BYTE <_dx
+       01:6576  69 10     	adc	LOW_BYTE #16
+       01:6578  85 FE     	sta	LOW_BYTE <_dx
+       01:657A  A5 FF     	lda	HIGH_BYTE <_dx
+       01:657C  69 00     	adc	HIGH_BYTE #16
+       01:657E  85 FF     	sta	HIGH_BYTE <_dx
+                          .endif
+  291  01:6580            .end:
+  292  01:6580  60        	rts
+  293                     
+  294                     
+  295                     ;returns height of current tile in al
+  296                     ;ax: x pos (pixels)
+  297                     ;bx: y pos (pixels)	
+  298  01:6581            get_height:
+  299                     ;tile offset = ((y >> 4) << 6) + (x >> 4) << 1
+  300                     ;            = ((y & #$fff0) << 2) + (x >> 3) & #$fffe
+  301                     	;pc engine adds 32 to sprite x positions and 64 to sprite y positions
+  302                     	;so origin is 32 pixels left of screen and 64 above
+  303                     	subw #32,<_ax
+       01:6581  38        	sec
+       01:6582  A5 F8     	lda	LOW_BYTE <_ax
+       01:6584  E9 20     	sbc	LOW_BYTE #32
+       01:6586  85 F8     	sta	LOW_BYTE <_ax
+       01:6588  A5 F9     	lda	HIGH_BYTE <_ax
+       01:658A  E9 00     	sbc	HIGH_BYTE #32
+       01:658C  85 F9     	sta	HIGH_BYTE <_ax
+  304                     	subw #64,<_bx
+       01:658E  38        	sec
+       01:658F  A5 FA     	lda	LOW_BYTE <_bx
+       01:6591  E9 40     	sbc	LOW_BYTE #64
+       01:6593  85 FA     	sta	LOW_BYTE <_bx
+       01:6595  A5 FB     	lda	HIGH_BYTE <_bx
+       01:6597  E9 00     	sbc	HIGH_BYTE #64
+       01:6599  85 FB     	sta	HIGH_BYTE <_bx
+  305                     	andw <_bx,#$fff0
+       01:659B  A5 FA     	lda	LOW_BYTE <_bx
+       01:659D  29 F0     	and LOW_BYTE #$fff0
+       01:659F  85 FA     	sta LOW_BYTE <_bx
+       01:65A1  A5 FB     	lda HIGH_BYTE <_bx
+       01:65A3  29 FF     	and HIGH_BYTE #$fff0
+       01:65A5  85 FB     	sta HIGH_BYTE <_bx
+  306                     	aslw <_bx
+       01:65A7  06 FA     	asl	<_bx		; word-sized value (at stated
+       01:65A9  26 FB     	rol	<_bx+1		; memory location)
+  307                     	aslw <_bx
+       01:65AB  06 FA     	asl	<_bx		; word-sized value (at stated
+       01:65AD  26 FB     	rol	<_bx+1		; memory location)
+  308                     	stw <_ax,<_cx
+       01:65AF  A5 F8     	lda	LOW_BYTE <_ax
+       01:65B1  85 FC     	sta	LOW_BYTE <_cx
+       01:65B3  A5 F9     	lda	HIGH_BYTE <_ax
+       01:65B5  85 FD     	sta	HIGH_BYTE <_cx
+  309                     	lsrw <_cx
+       01:65B7  46 FD     	lsr	<_cx+1		; value (at stated memory
+       01:65B9  66 FC     	ror	<_cx		; location)
+  310                     	lsrw <_cx
+       01:65BB  46 FD     	lsr	<_cx+1		; value (at stated memory
+       01:65BD  66 FC     	ror	<_cx		; location)
+  311                     	lsrw <_cx
+       01:65BF  46 FD     	lsr	<_cx+1		; value (at stated memory
+       01:65C1  66 FC     	ror	<_cx		; location)
+  312                     	andw <_cx,#$fffe
+       01:65C3  A5 FC     	lda	LOW_BYTE <_cx
+       01:65C5  29 FE     	and LOW_BYTE #$fffe
+       01:65C7  85 FC     	sta LOW_BYTE <_cx
+       01:65C9  A5 FD     	lda HIGH_BYTE <_cx
+       01:65CB  29 FF     	and HIGH_BYTE #$fffe
+       01:65CD  85 FD     	sta HIGH_BYTE <_cx
+  313                     	addw <_cx,<_bx
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:65CF  18        	clc
+       01:65D0  A5 FA     	lda	LOW_BYTE <_bx
+       01:65D2  65 FC     	adc	LOW_BYTE <_cx
+       01:65D4  85 FA     	sta	LOW_BYTE <_bx
+       01:65D6  A5 FB     	lda	HIGH_BYTE <_bx
+       01:65D8  65 FD     	adc	HIGH_BYTE <_cx
+       01:65DA  85 FB     	sta	HIGH_BYTE <_bx
+                          .endif
+  314                     	addw #map_load,<_bx
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:65DC  18        	clc
+       01:65DD  A5 FA     	lda	LOW_BYTE <_bx
+       01:65DF  69 60     	adc	LOW_BYTE #map_load
+       01:65E1  85 FA     	sta	LOW_BYTE <_bx
+       01:65E3  A5 FB     	lda	HIGH_BYTE <_bx
+       01:65E5  69 A0     	adc	HIGH_BYTE #map_load
+       01:65E7  85 FB     	sta	HIGH_BYTE <_bx
+                          .endif
+  315                     	;<_bx is the pointer to the tile
+  316  01:65E9  B2 FA     	lda [<_bx]
+  317  01:65EB  AA        	tax
+  318                     	;get height array index for the tile
+  319  01:65EC  BD 20 A0  	lda heights_load,x
+  320  01:65EF  85 FA     	sta <_bl
+  321  01:65F1  64 FB     	stz <_bh
+  322                     	;each height array is 16 bytes, so shift left by 4 to get the offset
+  323                     	aslw <_bx
+       01:65F3  06 FA     	asl	<_bx		; word-sized value (at stated
+       01:65F5  26 FB     	rol	<_bx+1		; memory location)
+  324                     	aslw <_bx
+       01:65F7  06 FA     	asl	<_bx		; word-sized value (at stated
+       01:65F9  26 FB     	rol	<_bx+1		; memory location)
+  325                     	aslw <_bx
+       01:65FB  06 FA     	asl	<_bx		; word-sized value (at stated
+       01:65FD  26 FB     	rol	<_bx+1		; memory location)
+  326                     	aslw <_bx
+       01:65FF  06 FA     	asl	<_bx		; word-sized value (at stated
+       01:6601  26 FB     	rol	<_bx+1		; memory location)
+  327                     	addw #block_arrs,<_bx
+                0000      .if	(2 = 3)
+                          .else
+                          	; 2-arg mode
+                          	;
+       01:6603  18        	clc
+       01:6604  A5 FA     	lda	LOW_BYTE <_bx
+       01:6606  69 47     	adc	LOW_BYTE #block_arrs
+       01:6608  85 FA     	sta	LOW_BYTE <_bx
+       01:660A  A5 FB     	lda	HIGH_BYTE <_bx
+       01:660C  69 42     	adc	HIGH_BYTE #block_arrs
+       01:660E  85 FB     	sta	HIGH_BYTE <_bx
+                          .endif
+  328                     	;get offset within the tile
+  329  01:6610  A5 F8     	lda <_al
+  330  01:6612  29 0F     	and #$f
+  331  01:6614  A8        	tay
+  332  01:6615  B1 FA     	lda [<_bx],y
+  333  01:6617  85 F8     	sta <_al
+  334  01:6619  60        	rts
+  335                     	
+  336                     	
 #[1]   main.asm
    49                     
    50                     	;asset location on cd-rom
@@ -1027,7 +1284,7 @@
    61                     
    64           0000      	.data
    65                     
-   66           64D1      	.code
+   66           661A      	.code
    67           0000      	.bank   0
    68           4070      	.org    $4070
    69                     
@@ -1235,9 +1492,9 @@
   175  00:4180            my_vsync:	
   176                     	incw <frame
        00:4180  E6 0D     	inc	<frame		; value at stated memory
-       00:4182  D0 02     	bne	.x_00120		; location
+       00:4182  D0 02     	bne	.x_00148		; location
        00:4184  E6 0E     	inc	<frame+1
-       00:4186            .x_00120:
+       00:4186            .x_00148:
   177  00:4186  64 0C     	stz <status
   178                     
   179                     	;set scroll pos

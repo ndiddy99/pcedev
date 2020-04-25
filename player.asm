@@ -21,10 +21,14 @@
 
 TOP_SPEED .equ $400
 ACCEL .equ $80
+GRAVITY .equ $a0
+JUMP_GRAVITY .equ $70
 PLAYERSPR_X .equ 152 ;onscreen sprite position
 PLAYERSPR_Y .equ 160
 PLAYER_WIDTH .equ 16
 PLAYER_HEIGHT .equ 32
+TSENSOR_HEIGHT .equ 8
+BSENSOR_HEIGHT .equ 24
 STATE_GROUND .equ 0
 STATE_AIR .equ 1
 
@@ -42,7 +46,7 @@ player_init:
 	rts
 
 player_iterate:
-;-----read input, set initial speed values-----
+;-----horizontal movement-----
 	bbr5 <joypad,.done_right
 	cmpw #TOP_SPEED,<player_dx
 	bpl .done_right
@@ -95,52 +99,52 @@ player_iterate:
 	sta <player_x+2
 .done_add:
 ;-----collision detection-----
-;check left foot
+	;top left
 	stw <player_x+1,<_ax
 	stw <player_y+1,<_bx
-	addw #PLAYER_HEIGHT,<_bx
-	jsr get_sensor
-	stw <_dx,<pad
-;check right foot
+	addw #TSENSOR_HEIGHT,<_bx
+	jsr get_height
+	beq .nohcollision_left
+	jmp .hcollision_left
+.nohcollision_left
+	;bottom left
+	stw <player_x+1,<_ax
+	stw <player_y+1,<_bx
+	addw #BSENSOR_HEIGHT,<_bx
+	jsr get_height
+	cmp #$10
+	beq .hcollision_left
+	;top right
 	stw <player_x+1,<_ax
 	addw #PLAYER_WIDTH,<_ax
 	stw <player_y+1,<_bx
-	addw #PLAYER_HEIGHT,<_bx
-	jsr get_sensor
-	cmpw <pad,<_dx
-	bmi .left_higher
-	stw <_dx,<pad
-.left_higher:
-	cmpw #$0,<player_dy ;don't check for ground collision if moving upwards
-	bmi .done_ground
-	cmpw #$fff0,<pad ;-16 is the value returned if no ground is found
-	bne .on_ground 
-	lda #STATE_AIR
-	sta <player_state
-	bra .done_ground
-.on_ground:
-	lda #STATE_GROUND
-	sta <player_state
-	stwz <player_dy
-	;foot pos in ax
-	stw <player_y+1,<_ax
-	addw #PLAYER_HEIGHT,<_ax
-	;place feet at bottom of block
-	andw <_ax,#$fff0
-	addw #16,<_ax
-	;move up by highest sensor's height
-	subw <pad,<_ax
-	;translate from foot pos to sprite pos
-	subw #PLAYER_HEIGHT,<_ax
-	stw <_ax,<player_y+1
-.done_ground:
+	addw #TSENSOR_HEIGHT,<_bx
+	jsr get_height
+	bne .hcollision_right
+	;bottom right
+	stw <player_x+1,<_ax
+	addw #PLAYER_WIDTH,<_ax
+	stw <player_y+1,<_bx
+	addw #BSENSOR_HEIGHT,<_bx
+	jsr get_height
+	cmp #$10
+	beq .hcollision_right
 	
-;-----done collision detection-----
-	stw <player_x+1,<scroll_x
-	subw #PLAYERSPR_X,<scroll_x
-	
+	bra .done_hcollision
+.hcollision_left:
+	stwz <player_dx
+	andw <player_x+1,#$fff0
+	addw #$10,<player_x+1
+	stz <player_x
+	bra .done_hcollision
+.hcollision_right:
+	stwz <player_dx
+	andw <player_x+1,#$fff0
+	decw <player_x+1
+	stz <player_x
+.done_hcollision:	
 ;-----jumping & falling-----
-	bbr0 <joypad,.done_one
+	bbr0 <joyedge,.done_one ;handle jump button press
 	lda <player_state
 	cmp #STATE_AIR
 	beq .done_one
@@ -155,13 +159,12 @@ player_iterate:
 	;jump higher if player's still holding I
 	bbr0 <joypad,.normal_gravity
 	cmpw #$0,<player_dy
-	; beq .normal_gravity
 	bpl .normal_gravity
-	addw #$40,<player_dy
+	addw #JUMP_GRAVITY,<player_dy
 	bra .done_gravity
 	
 .normal_gravity:
-	addw #ACCEL,<player_dy
+	addw #GRAVITY,<player_dy
 .done_gravity:
 	;add dy to player_y
 	lda <player_dy+1
@@ -179,8 +182,75 @@ player_iterate:
 	adc #$ff
 	sta player_y+2
 .done_air:
+	
+;-----collision detection-----
+	cmpw #$0,<player_dy ;don't check for ground collision if moving upwards
+	bpl .floor_collision
+	beq .floor_collision
+	jmp .ceil_collision
+	
+.floor_collision:
+;check left foot
+	stw <player_x+1,<_ax
+	stw <player_y+1,<_bx
+	addw #PLAYER_HEIGHT,<_bx
+	jsr get_sensor
+	stw <_dx,<pad
+;check right foot
+	stw <player_x+1,<_ax
+	addw #PLAYER_WIDTH,<_ax
+	stw <player_y+1,<_bx
+	addw #PLAYER_HEIGHT,<_bx
+	jsr get_sensor
+	cmpw <pad,<_dx
+	bmi .left_higher
+	stw <_dx,<pad
+.left_higher:
+	cmpw #$fff0,<pad ;-16 is the value returned if no ground is found
+	bne .on_ground 
+	lda #STATE_AIR
+	sta <player_state
+	jmp .done_ground
+.on_ground:
+	lda #STATE_GROUND
+	sta <player_state
+	stwz <player_dy
+	;foot pos in ax
+	stw <player_y+1,<_ax
+	addw #PLAYER_HEIGHT,<_ax
+	;place feet at bottom of block
+	andw <_ax,#$fff0
+	addw #16,<_ax
+	;move up by highest sensor's height
+	subw <pad,<_ax
+	;translate from foot pos to sprite pos
+	subw #PLAYER_HEIGHT,<_ax
+	stw <_ax,<player_y+1
+	bra .done_ground
+.ceil_collision:
+	;top left
+	stw <player_x+1,<_ax
+	stw <player_y+1,<_bx
+	jsr get_height
+	bne .ceil_rebound
+	;top right
+	stw <player_x+1,<_ax
+	addw #PLAYER_WIDTH,<_ax	
+	stw <player_y+1,<_bx
+	jsr get_height
+	beq .done_ground
+.ceil_rebound:
+	stwz <player_dy
+	andw <player_y+1,#$fff0
+	addw #$10,<player_y+1
+	stz <player_y
+.done_ground:
+	
+;-----done collision detection-----
+	stw <player_x+1,<scroll_x
+	subw #PLAYERSPR_X,<scroll_x	
 	stw <player_y+1,<scroll_y
-	subw #PLAYERSPR_Y,<scroll_y
+	subw #PLAYERSPR_Y,<scroll_y	
 	rts
 	
 ;returns number of pixels to move up/down in dx
