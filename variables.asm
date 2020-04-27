@@ -30,6 +30,7 @@ start_vars:
 	player_dy: .ds 2
 	player_state: .ds 1
 	player_frame: .ds 1
+	player_timer: .ds 1
 end_vars:	
 	.bss
 	;work ram variables

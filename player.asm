@@ -32,6 +32,16 @@ BSENSOR_HEIGHT .equ 24
 STATE_GROUND .equ 0
 STATE_AIR .equ 1
 
+FRAME_STAND .equ ($C0*2)
+FRAME_WALK1 .equ ($C1*2)
+FRAME_WALK2 .equ ($C4*2)
+FRAME_JUMP .equ ($C5*2)
+FRAME_TIMER .equ 10 ;number of screen frames before changing animation frames
+
+player_walk:
+	dw FRAME_WALK1,FRAME_STAND,FRAME_WALK2,FRAME_STAND
+end_player_walk:
+
 player_init:
 	;write player sprite to satb
 	stw #PLAYERSPR_Y,satb ;y pos
@@ -51,11 +61,19 @@ player_iterate:
 	cmpw #TOP_SPEED,<player_dx
 	bpl .done_right
 	addw #ACCEL,<player_dx
+	;clear mirror bit when going right
+	lda satb+7
+	and #%11110111
+	sta satb+7	
 .done_right:
 	bbr7 <joypad,.done_left
 	cmpw #-TOP_SPEED,<player_dx
 	bmi .done_left
 	beq .done_left
+	;set mirror bit when going left
+	lda satb+7
+	ora #%00001000
+	sta satb+7	
 	subw #ACCEL,<player_dx
 .done_left:
 	;deceleration only happens when not pressing left or right
@@ -250,7 +268,45 @@ player_iterate:
 	stw <player_x+1,<scroll_x
 	subw #PLAYERSPR_X,<scroll_x	
 	stw <player_y+1,<scroll_y
-	subw #PLAYERSPR_Y,<scroll_y	
+	subw #PLAYERSPR_Y,<scroll_y
+	
+;-----animation-----
+	lda <player_state
+	cmp #STATE_AIR ;if player's in the air, show the jump frame
+	bne .no_jump
+	stw #FRAME_JUMP,satb+4
+	stz <player_frame
+	bra .done_anim
+.no_jump:
+	lda <player_dx ;if player's moving, decrement the timer
+	ora <player_dx+1
+	beq .still
+	lda <player_timer
+	cmp #FRAME_TIMER
+	beq .animate_player
+	inc <player_timer
+	bra .done_anim
+.animate_player ;if timer's zero, get the next frame from the array
+	stz <player_timer ;and write it to the satb buffer
+	ldx <player_frame
+	lda player_walk,x
+	sta satb+4
+	inx
+	lda player_walk,x
+	sta satb+5
+	inx
+	txa
+	cmp #(end_player_walk - player_walk)
+	bne .no_reset_frame ;if the next frame is outside the array,
+	stz <player_frame   ;reset it to zero
+	bra .done_anim
+.no_reset_frame:
+	stx <player_frame
+	bra .done_anim
+.still:
+	stw #FRAME_STAND,satb+4 ;if player's still, just show the still frame
+	stz <player_frame
+.done_anim:
 	rts
 	
 ;returns number of pixels to move up/down in dx
